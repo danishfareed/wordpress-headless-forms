@@ -47,7 +47,7 @@ class Autoloader {
      * @since 1.0.0
      */
     public function __construct() {
-        $this->base_dir = HEADLESS_FORMS_PATH . 'includes/';
+        $this->base_dir = HEADLESS_FORMS_PATH;
     }
 
     /**
@@ -81,7 +81,7 @@ class Autoloader {
         $file = $this->get_file_path( $relative_class );
 
         // If the file exists, require it.
-        if ( file_exists( $file ) ) {
+        if ( $file && file_exists( $file ) ) {
             require_once $file;
         }
     }
@@ -105,7 +105,26 @@ class Autoloader {
         $parts = explode( '\\', $relative_class );
         $class_name = array_pop( $parts );
 
-        // Convert sub-namespace parts to directory path.
+        // Determine the base directory based on namespace.
+        $base = $this->base_dir;
+        
+        // Map namespaces to directories.
+        if ( ! empty( $parts ) ) {
+            $namespace_dir = strtolower( $parts[0] );
+            
+            // Admin namespace maps to admin/ folder.
+            if ( $namespace_dir === 'admin' ) {
+                $base = $this->base_dir . 'admin/';
+                array_shift( $parts ); // Remove 'Admin' from parts.
+            } else {
+                // Other namespaces (like Providers) map to includes/namespace/.
+                $base = $this->base_dir . 'includes/';
+            }
+        } else {
+            $base = $this->base_dir . 'includes/';
+        }
+
+        // Convert remaining sub-namespace parts to directory path.
         $sub_dir = '';
         if ( ! empty( $parts ) ) {
             $sub_dir = strtolower( implode( '/', $parts ) ) . '/';
@@ -113,17 +132,32 @@ class Autoloader {
 
         // Determine the file prefix based on the class type.
         $prefix = 'class-';
-        if ( strpos( $class_name, 'Interface' ) !== false || substr( $class_name, -9 ) === 'Interface' ) {
+        $original_class_name = $class_name;
+        
+        // Check if it's an interface (ends with _Interface or Interface).
+        if ( substr( $class_name, -10 ) === '_Interface' ) {
             $prefix = 'interface-';
-            $class_name = str_replace( 'Interface', '', $class_name );
-        } elseif ( strpos( $class_name, 'Trait' ) !== false || substr( $class_name, -5 ) === 'Trait' ) {
+            $class_name = substr( $class_name, 0, -10 ); // Remove _Interface.
+        } elseif ( substr( $class_name, -9 ) === 'Interface' ) {
+            $prefix = 'interface-';
+            $class_name = substr( $class_name, 0, -9 ); // Remove Interface.
+        } elseif ( substr( $class_name, -6 ) === '_Trait' ) {
             $prefix = 'trait-';
-            $class_name = str_replace( 'Trait', '', $class_name );
+            $class_name = substr( $class_name, 0, -6 ); // Remove _Trait.
+        } elseif ( substr( $class_name, -5 ) === 'Trait' ) {
+            $prefix = 'trait-';
+            $class_name = substr( $class_name, 0, -5 ); // Remove Trait.
         }
 
         // Convert class name to file name (WordPress style).
+        // Handle empty class name edge case.
+        if ( empty( $class_name ) ) {
+            $class_name = $original_class_name;
+            $prefix = 'class-';
+        }
+
         $file_name = $prefix . strtolower( str_replace( '_', '-', $class_name ) ) . '.php';
 
-        return $this->base_dir . $sub_dir . $file_name;
+        return $base . $sub_dir . $file_name;
     }
 }
