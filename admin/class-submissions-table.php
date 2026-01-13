@@ -117,7 +117,7 @@ class Submissions_Table extends \WP_List_Table {
             <?php submit_button( __( 'Filter', 'headless-forms' ), '', 'filter', false ); ?>
 
             <?php if ( $current_form ) : ?>
-                <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=headless-forms-submissions&action=export&form_id=' . $current_form ), 'export_submissions_' . $current_form ) ); ?>" class="button">
+                <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=headless-forms&view=submissions&action=export&form_id=' . $current_form ), 'export_submissions_' . $current_form ) ); ?>" class="button">
                     <?php esc_html_e( 'Export CSV', 'headless-forms' ); ?>
                 </a>
             <?php endif; ?>
@@ -220,7 +220,7 @@ class Submissions_Table extends \WP_List_Table {
      * @return string
      */
     public function column_id( $item ) {
-        $url = admin_url( 'admin.php?page=headless-forms-submissions&submission_id=' . $item->id );
+        $url = admin_url( 'admin.php?page=headless-forms&view=submissions&submission_id=' . $item->id );
         $starred = $item->is_starred ? '★' : '☆';
 
         return sprintf(
@@ -260,7 +260,7 @@ class Submissions_Table extends \WP_List_Table {
         $remaining = count( $data ) - $count;
         $more = $remaining > 0 ? sprintf( '<br><em>+%d more fields</em>', $remaining ) : '';
 
-        $view_url = admin_url( 'admin.php?page=headless-forms-submissions&submission_id=' . $item->id );
+        $view_url = admin_url( 'admin.php?page=headless-forms&view=submissions&submission_id=' . $item->id );
 
         return implode( '<br>', $preview ) . $more . '<br><a href="' . esc_url( $view_url ) . '">' . esc_html__( 'View Details', 'headless-forms' ) . ' →</a>';
     }

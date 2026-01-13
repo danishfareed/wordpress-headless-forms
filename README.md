@@ -1,249 +1,79 @@
-# Headless Forms
+# Headless Forms for WordPress
 
-[![WordPress](https://img.shields.io/badge/WordPress-5.8+-blue.svg)](https://wordpress.org/)
-[![PHP](https://img.shields.io/badge/PHP-7.4+-purple.svg)](https://php.net/)
-[![License](https://img.shields.io/badge/License-GPL%20v2-green.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
+[![GPLv2 License](https://img.shields.io/badge/license-GPLv2-purple.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
+[![WordPress Version](https://img.shields.io/badge/wordpress-%3E%3D%205.8-blue.svg)](https://wordpress.org/download/)
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D%207.4-orange.svg)](https://www.php.net/downloads)
 
-A robust, production-ready WordPress plugin for handling form submissions in headless/decoupled architectures. Perfect for static sites, SPAs, and JAMstack applications built with Next.js, Astro, Vue, or any frontend framework.
-
-## ✨ Features
-
-### 🚀 Core Features
-
-- **REST API Endpoint** — Secure submission endpoint at `/wp-json/headless-forms/v1/submit/{form_slug}`
-- **Custom Database Tables** — High-performance storage separate from WordPress posts
-- **Multiple Forms** — Create unlimited forms with unique slugs and settings
-- **Submission Management** — View, filter, search, star, and export submissions
-
-### 📧 Email Providers (16 Total)
-
-| Provider | Provider | Provider | Provider |
-|----------|----------|----------|----------|
-| WordPress Mail | Custom SMTP | Amazon SES | SendGrid |
-| **Resend** | Mailgun | Postmark | SparkPost |
-| Mandrill | Elastic Email | Brevo | MailerSend |
-| Mailjet | SMTP2GO | Moosend | **Loops** |
-
-### 🔒 Security
-
-- API Key Authentication (Header or Bearer Token)
-- Honeypot Spam Protection
-- Rate Limiting (configurable per IP)
-- IP Allowlist/Blocklist with CIDR support
-- CORS Origin Validation
-- Encrypted Credential Storage
-
-### ⚡ Advanced Features
-
-- **Webhooks** — Send data to Zapier, Make, n8n, or custom endpoints
-- **Auto-Responders** — Customizable confirmation emails
-- **Email Logs** — Track delivery with retry functionality
-- **GDPR Compliance** — Data export, deletion, and retention settings
-- **Analytics Dashboard** — Submission charts and statistics
+**Headless Forms** is a powerful REST API form handler designed specifically for headless WordPress architectures. Accept form submissions from React, Next.js, Vue, Astro, or any modern frontend with ease and security.
 
 ---
 
-## 📋 Requirements
+## ✨ Key Features
 
-| Requirement | Version |
-|-------------|---------|
-| WordPress | 5.8+ |
-| PHP | 7.4+ |
-| MySQL | 5.6+ |
-
----
-
-## 🚀 Installation
-
-1. Download the plugin ZIP file
-2. Go to **Plugins → Add New → Upload Plugin** in WordPress admin
-3. Upload the ZIP file and click **Install Now**
-4. Activate the plugin
-5. Navigate to **Headless Forms** in the admin menu
+- 🚀 **Secure REST API** – API key authentication with rate limiting.
+- 📧 **16+ Email Providers** – Native support for AWS SES, SendGrid, Resend, Mailgun, Postmark, and more.
+- 🔌 **Webhook Integrations** – Connect to Zapier, Google Sheets, Slack, and Make.
+- 🛡️ **Spam Protection** – Built-in honeypot fields and IP-based rate limiting.
+- 🔒 **GDPR Ready** – Tools for data export, deletion, and automatic retention policies.
+- 📊 **Modern Admin Dashboard** – Futuristic UI (Purple/Orange themed) with submission analytics.
+- 📨 **Auto-Responders** – Send customized confirmation emails to your users.
+- 📜 **Email Logs** – Comprehensive tracking of all outgoing emails with unique Message IDs.
 
 ---
 
-## ⚡ Quick Start
+## 🚀 Quick Start
 
-### 1. Create a Form
+### 1. Installation
+1. Clone this repository into your `wp-content/plugins/` directory.
+2. Activate the plugin in your WordPress Admin.
+3. Go to **Headless Forms > Settings** to get your API Key.
 
-Go to **Headless Forms → Add New** and create your first form:
-- Enter a form name (e.g., "Contact Form")
-- Configure notification emails
-- Set up auto-responder (optional)
-- Save the form
-
-### 2. Get Your API Key
-
-Go to **Headless Forms → Settings** and copy your API key.
-
-### 3. Submit Forms from Your Frontend
+### 2. Frontend Integration
+Submit your forms to: `POST /wp-json/headless-forms/v1/submit/{form-slug}`
 
 ```javascript
-const response = await fetch('https://your-site.com/wp-json/headless-forms/v1/submit/contact-form', {
+fetch('https://yoursite.com/wp-json/headless-forms/v1/submit/contact-us', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-HF-API-Key': 'your-api-key-here'
+    'X-HF-API-Key': 'your-api-key'
   },
   body: JSON.stringify({
     name: 'John Doe',
     email: 'john@example.com',
-    message: 'Hello from the frontend!'
+    message: 'Hello from the headless frontend!',
+    _honey: '' // Ensure this hidden honeypot field is empty
   })
 });
-
-const data = await response.json();
-console.log(data.success); // true
-console.log(data.submission_id); // 123
 ```
 
 ---
 
-## 📖 API Reference
+## 🛠 Supported Email Providers
 
-### Submit Form
-
-```http
-POST /wp-json/headless-forms/v1/submit/{form_slug}
-```
-
-#### Headers
-
-| Header | Value |
-|--------|-------|
-| `Content-Type` | `application/json` |
-| `X-HF-API-Key` | `your-api-key` |
-
-*Or use `Authorization: Bearer your-api-key`*
-
-#### Request Body
-
-Any JSON object with your form fields. Include a `_honey` field (empty) for honeypot validation.
-
-#### Success Response (200)
-
-```json
-{
-  "success": true,
-  "submission_id": 123,
-  "message": "Form submitted successfully.",
-  "redirect_url": "https://example.com/thank-you"
-}
-```
-
-#### Error Responses
-
-| Code | Description |
-|------|-------------|
-| `401` | Invalid API key |
-| `403` | IP blocked or CORS error |
-| `404` | Form not found |
-| `429` | Rate limited |
+Headless Forms supports a wide range of transactional email services out of the box:
+- **AWS SES** (with Bounce/Delivery tracking)
+- **SendGrid**, **Resend**, **Mailgun**, **Postmark**
+- **Brevo**, **Mailjet**, **Postmark**, **SparkPost**
+- **SMTP**, **WP Mail** (Internal)
 
 ---
 
-## 🪝 Hooks & Filters
+## 🎨 Modern Dashboard
 
-### Actions
-
-```php
-// Before submission is saved
-do_action( 'headless_forms_before_submit', $form_id, $sanitized_data );
-
-// After submission is saved
-do_action( 'headless_forms_after_submit', $submission_id, $form_id, $sanitized_data );
-
-// After email is sent
-do_action( 'headless_forms_email_sent', $submission_id, $provider );
-
-// After GDPR deletion
-do_action( 'headless_forms_gdpr_data_deleted', $email, $deleted_count );
-```
-
-### Filters
-
-```php
-// Modify submission data before sanitization
-add_filter( 'headless_forms_before_sanitize', function( $data, $form ) {
-    return $data;
-}, 10, 2 );
-
-// Modify sanitized data
-add_filter( 'headless_forms_sanitize_data', function( $data, $form_id ) {
-    return $data;
-}, 10, 2 );
-
-// Modify email headers
-add_filter( 'headless_forms_email_headers', function( $headers, $form_id ) {
-    return $headers;
-}, 10, 2 );
-
-// Modify API response
-add_filter( 'headless_forms_api_response', function( $response, $submission_id, $form_id ) {
-    return $response;
-}, 10, 3 );
-```
-
----
-
-## 🔗 Webhooks
-
-Configure webhooks per form to send data to external services:
-
-1. Go to the form edit page
-2. Add webhook URL
-3. Select trigger event (`submission.created`)
-4. Configure authentication (optional)
-
-### Webhook Payload
-
-```json
-{
-  "event": "submission.created",
-  "timestamp": "2024-01-15T10:30:00+00:00",
-  "submission_id": 123,
-  "form_id": 1,
-  "form_name": "Contact Form",
-  "data": {
-    "name": "John Doe",
-    "email": "john@example.com"
-  },
-  "meta": {
-    "ip_address": "192.168.1.1",
-    "user_agent": "...",
-    "referrer": "https://example.com/contact"
-  }
-}
-```
-
----
-
-## 🔐 GDPR Compliance
-
-The plugin includes built-in GDPR tools:
-
-| Feature | Description |
-|---------|-------------|
-| **Data Export** | Export all submissions by email address |
-| **Data Deletion** | Delete all data for an email address |
-| **Data Retention** | Auto-delete submissions after X days |
-| **Privacy Policy** | Generated text for your privacy policy |
-
----
-
-## 📚 Support
-
-- **Documentation:** [codewithdanish.dev/headless-forms](https://codewithdanish.dev/headless-forms)
-- **GitHub:** [github.com/danishfareed/wordpress-headless-forms](https://github.com/danishfareed/wordpress-headless-forms)
-- **Author:** Danish Mohammed
+The plugin features a futuristic, premium UI inspired by modern performance plugins, providing:
+- Real-time submission analytics.
+- Integration management.
+- Detailed email delivery logs.
+- Easy-to-use form configuration.
 
 ---
 
 ## 📄 License
 
-GPL v2 or later. See [LICENSE](LICENSE) for details.
+This project is licensed under the [GNU General Public License v2 or later](LICENSE).
 
 ---
 
-<p align="center">Made with ❤️ by <a href="https://codewithdanish.dev">Danish Mohammed</a></p>
+## 👨‍💻 Created By
+[Danish Mohammed](https://codewithdanish.dev) - Professional WordPress & Headless Developer.

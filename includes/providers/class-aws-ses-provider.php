@@ -119,7 +119,30 @@ class AWS_SES_Provider implements Email_Provider_Interface {
         // Sign request with AWS Signature Version 4.
         $response = $this->make_signed_request( $endpoint, $body, $access_key, $secret_key, $region, $host );
 
-        return ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200;
+        if ( is_wp_error( $response ) ) {
+            return array(
+                'success'    => false,
+                'message_id' => null,
+                'error'      => $response->get_error_message(),
+            );
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( $code === 200 && isset( $body['MessageId'] ) ) {
+            return array(
+                'success'    => true,
+                'message_id' => $body['MessageId'],
+                'error'      => '',
+            );
+        }
+
+        return array(
+            'success'    => false,
+            'message_id' => null,
+            'error'      => isset( $body['message'] ) ? $body['message'] : 'Unknown AWS SES error',
+        );
     }
 
     /**

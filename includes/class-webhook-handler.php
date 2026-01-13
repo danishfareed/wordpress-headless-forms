@@ -174,6 +174,11 @@ class Webhook_Handler {
      * @return string
      */
     private function prepare_payload( $webhook, $payload ) {
+        // Use template if available.
+        if ( ! empty( $webhook->payload_template ) ) {
+            return $this->process_template( $webhook->payload_template, $payload );
+        }
+
         // Add event info.
         $payload['event'] = $webhook->trigger_event;
         $payload['timestamp'] = current_time( 'c' );
@@ -184,6 +189,66 @@ class Webhook_Handler {
 
         // Form encoded.
         return http_build_query( $payload );
+    }
+
+    /**
+     * Process payload template.
+     *
+     * @since 1.0.0
+     * @param string $template The JSON template.
+     * @param array  $payload  The raw payload data.
+     * @return string Processed JSON.
+     */
+    private function process_template( $template, $payload ) {
+        $is_json = ( substr( trim( $template ), 0, 1 ) === '{' );
+
+        // Helper to format value.
+        $format_value = function( $value ) use ( $is_json ) {
+            $val = is_array( $value ) ? implode( ', ', $value ) : $value;
+            if ( $is_json ) {
+                 // Escape backslashes first, then quotes, newlines, etc.
+                 $val = str_replace( 
+                     array( '\\', '"', "\n", "\r", "\t" ), 
+                     array( '\\\\', '\"', '\\n', '\\r', '\\t' ), 
+                     $val 
+                 );
+            }
+            return $val;
+        };
+
+        // Replace simple placeholders.
+        $template = str_replace( '{{form_name}}', $format_value( isset( $payload['form_name'] ) ? $payload['form_name'] : '' ), $template );
+        $template = str_replace( '{{form_id}}', $format_value( isset( $payload['form_id'] ) ? $payload['form_id'] : '' ), $template );
+        $template = str_replace( '{{timestamp}}', $format_value( current_time( 'c' ) ), $template );
+
+        // Handle {{all_fields}}.
+        if ( strpos( $template, '{{all_fields}}' ) !== false ) {
+            $fields_str = '';
+            if ( isset( $payload['data'] ) && is_array( $payload['data'] ) ) {
+                foreach ( $payload['data'] as $key => $value ) {
+                    $val = is_array( $value ) ? implode( ', ', $value ) : $value;
+                    $fields_str .= ucfirst( $key ) . ': ' . $val . "\n";
+                }
+            }
+            // If JSON, we need to escape the entire block string.
+            if ( $is_json ) {
+                $fields_str = str_replace( 
+                     array( '\\', '"', "\n", "\r", "\t" ), 
+                     array( '\\\\', '\"', '\\n', '\\r', '\\t' ), 
+                     $fields_str 
+                 );
+            }
+            $template = str_replace( '{{all_fields}}', $fields_str, $template );
+        }
+
+        // Handle specific fields {{field_name}}.
+        if ( isset( $payload['data'] ) && is_array( $payload['data'] ) ) {
+            foreach ( $payload['data'] as $key => $value ) {
+                $template = str_replace( '{{' . $key . '}}', $format_value( $value ), $template );
+            }
+        }
+
+        return $template;
     }
 
     /**

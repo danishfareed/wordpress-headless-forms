@@ -160,16 +160,16 @@ class Forms_Table extends \WP_List_Table {
      * @return string
      */
     public function column_form_name( $item ) {
-        $edit_url = admin_url( 'admin.php?page=headless-forms-new&form_id=' . $item->id );
+        $edit_url = admin_url( 'admin.php?page=headless-forms&view=edit-form&form_id=' . $item->id );
         $delete_url = wp_nonce_url(
-            admin_url( 'admin.php?page=headless-forms-forms&action=delete&form_id=' . $item->id ),
+            admin_url( 'admin.php?page=headless-forms&view=forms&action=delete&form_id=' . $item->id ),
             'delete_form_' . $item->id
         );
         $duplicate_url = wp_nonce_url(
-            admin_url( 'admin.php?page=headless-forms-forms&action=duplicate&form_id=' . $item->id ),
+            admin_url( 'admin.php?page=headless-forms&view=forms&action=duplicate&form_id=' . $item->id ),
             'duplicate_form_' . $item->id
         );
-        $submissions_url = admin_url( 'admin.php?page=headless-forms-submissions&form_id=' . $item->id );
+        $submissions_url = admin_url( 'admin.php?page=headless-forms&view=submissions&form_id=' . $item->id );
 
         $actions = array(
             'edit'        => sprintf( '<a href="%s">%s</a>', $edit_url, __( 'Edit', 'headless-forms' ) ),
@@ -209,7 +209,7 @@ class Forms_Table extends \WP_List_Table {
      * @return string
      */
     public function column_submissions( $item ) {
-        $url = admin_url( 'admin.php?page=headless-forms-submissions&form_id=' . $item->id );
+        $url = admin_url( 'admin.php?page=headless-forms&view=submissions&form_id=' . $item->id );
         return sprintf(
             '<a href="%s" class="hf-submission-count">%d</a>',
             $url,

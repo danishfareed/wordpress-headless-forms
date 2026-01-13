@@ -8,12 +8,19 @@
 
 defined( 'ABSPATH' ) || exit;
 ?>
-<div class="wrap hf-wrap">
-    <h1><?php esc_html_e( 'Email Logs', 'headless-forms' ); ?></h1>
-    <hr class="wp-header-end">
 
+<!-- Page Header -->
+<div class="hf-page-header">
+    <h2 class="hf-page-title">
+        <span class="dashicons dashicons-email-alt"></span>
+        <?php esc_html_e( 'Email Logs', 'headless-forms' ); ?>
+    </h2>
+</div>
+
+<div class="hf-card">
     <form method="get">
-        <input type="hidden" name="page" value="headless-forms-logs">
+        <input type="hidden" name="page" value="headless-forms">
+        <input type="hidden" name="view" value="email-logs">
         <?php $logs_table->display(); ?>
     </form>
 </div>

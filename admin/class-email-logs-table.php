@@ -33,13 +33,14 @@ class Email_Logs_Table extends \WP_List_Table {
 
     public function get_columns() {
         return array(
-            'id'         => __( 'ID', 'headless-forms' ),
-            'email_type' => __( 'Type', 'headless-forms' ),
-            'provider'   => __( 'Provider', 'headless-forms' ),
-            'recipient'  => __( 'Recipient', 'headless-forms' ),
-            'subject'    => __( 'Subject', 'headless-forms' ),
-            'status'     => __( 'Status', 'headless-forms' ),
-            'created_at' => __( 'Sent At', 'headless-forms' ),
+            'id'             => __( 'ID', 'headless-forms' ),
+            'email_type'     => __( 'Type', 'headless-forms' ),
+            'provider'       => __( 'Provider', 'headless-forms' ),
+            'recipient'      => __( 'Recipient', 'headless-forms' ),
+            'subject'        => __( 'Subject', 'headless-forms' ),
+            'provider_message_id' => __( 'Msg ID', 'headless-forms' ),
+            'status'         => __( 'Status', 'headless-forms' ),
+            'created_at'     => __( 'Sent At', 'headless-forms' ),
         );
     }
 
@@ -63,7 +64,10 @@ class Email_Logs_Table extends \WP_List_Table {
             <select name="status">
                 <option value=""><?php esc_html_e( 'All Statuses', 'headless-forms' ); ?></option>
                 <option value="sent" <?php selected( $current_status, 'sent' ); ?>><?php esc_html_e( 'Sent', 'headless-forms' ); ?></option>
+                <option value="delivered" <?php selected( $current_status, 'delivered' ); ?>><?php esc_html_e( 'Delivered', 'headless-forms' ); ?></option>
                 <option value="failed" <?php selected( $current_status, 'failed' ); ?>><?php esc_html_e( 'Failed', 'headless-forms' ); ?></option>
+                <option value="bounced" <?php selected( $current_status, 'bounced' ); ?>><?php esc_html_e( 'Bounced', 'headless-forms' ); ?></option>
+                <option value="complaint" <?php selected( $current_status, 'complaint' ); ?>><?php esc_html_e( 'Complaint', 'headless-forms' ); ?></option>
                 <option value="pending" <?php selected( $current_status, 'pending' ); ?>><?php esc_html_e( 'Pending', 'headless-forms' ); ?></option>
             </select>
             <?php submit_button( __( 'Filter', 'headless-forms' ), '', 'filter', false ); ?>
@@ -119,13 +123,22 @@ class Email_Logs_Table extends \WP_List_Table {
 
     public function column_status( $item ) {
         $classes = array(
-            'sent'    => 'hf-status-active',
-            'failed'  => 'hf-status-spam',
-            'pending' => 'hf-status-new',
+            'sent'      => 'hf-status-active', // Blue/Gray
+            'delivered' => 'hf-status-active', // Green override in CSS?
+            'failed'    => 'hf-status-spam',   // Red
+            'bounced'   => 'hf-status-spam',   // Red
+            'complaint' => 'hf-status-spam',   // Orange?
+            'pending'   => 'hf-status-new',
         );
         $class = isset( $classes[ $item->status ] ) ? $classes[ $item->status ] : '';
+        
+        // Custom styling for specific statuses if needed.
+        $style = '';
+        if ( $item->status === 'delivered' ) $style = 'background:#dcfce7; color:#166534;';
+        if ( $item->status === 'bounced' )   $style = 'background:#fee2e2; color:#991b1b;';
+        if ( $item->status === 'complaint' ) $style = 'background:#ffedd5; color:#9a3412;';
 
-        $output = sprintf( '<span class="hf-status %s">%s</span>', $class, esc_html( ucfirst( $item->status ) ) );
+        $output = sprintf( '<span class="hf-status %s" style="%s">%s</span>', $class, $style, esc_html( ucfirst( $item->status ) ) );
 
         if ( $item->status === 'failed' && $item->retry_count < $item->max_retries ) {
             $output .= sprintf( ' <small>(%d/%d retries)</small>', $item->retry_count, $item->max_retries );
@@ -136,6 +149,13 @@ class Email_Logs_Table extends \WP_List_Table {
         }
 
         return $output;
+    }
+
+    public function column_provider_message_id( $item ) {
+        if ( empty( $item->provider_message_id ) ) {
+            return '-';
+        }
+        return sprintf( '<code style="font-size:11px; user-select:all;">%s</code>', esc_html( $item->provider_message_id ) );
     }
 
     public function column_provider( $item ) {

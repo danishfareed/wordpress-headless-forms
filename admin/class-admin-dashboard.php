@@ -44,6 +44,8 @@ class Admin_Dashboard {
         add_action( 'admin_init', array( $this, 'handle_actions' ) );
         add_action( 'wp_ajax_headless_forms_test_email', array( $this, 'ajax_test_email' ) );
         add_action( 'wp_ajax_headless_forms_regenerate_key', array( $this, 'ajax_regenerate_key' ) );
+        add_action( 'wp_ajax_headless_forms_save_webhook', array( $this, 'ajax_save_webhook' ) );
+        add_action( 'wp_ajax_headless_forms_delete_webhook', array( $this, 'ajax_delete_webhook' ) );
     }
 
     /**
@@ -59,70 +61,117 @@ class Admin_Dashboard {
             __( 'Headless Forms', 'headless-forms' ),
             'manage_options',
             'headless-forms',
-            array( $this, 'render_dashboard' ),
+            array( $this, 'render_app' ),
             'dashicons-feedback',
             30
         );
+        
+        // We remove submenus to force SPA mode.
+        // remove_submenu_page( 'headless-forms', 'headless-forms' );
+    }
 
-        // Dashboard submenu (same as parent).
-        add_submenu_page(
-            'headless-forms',
-            __( 'Dashboard', 'headless-forms' ),
-            __( 'Dashboard', 'headless-forms' ),
-            'manage_options',
-            'headless-forms',
-            array( $this, 'render_dashboard' )
+    /**
+     * Render the main SPA app layout.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function render_app() {
+        // Enqueue assets first.
+        wp_enqueue_style( 'headless-forms-admin' );
+        wp_enqueue_script( 'headless-forms-admin' );
+        
+        // Pass necessary data to JS.
+        wp_localize_script(
+            'headless-forms-admin',
+            'headlessFormsAdmin',
+            array(
+                'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+                'nonce'   => wp_create_nonce( 'headless_forms_nonce' ),
+                'apiUrl'  => rest_url( 'headless-forms/v1' ),
+                'strings' => array(
+                    'confirmDelete'    => __( 'Are you sure you want to delete this form? All data will be lost.', 'headless-forms' ),
+                    'copied'           => __( 'Copied!', 'headless-forms' ),
+                    'testEmailSending' => __( 'Sending...', 'headless-forms' ),
+                ),
+            )
         );
 
-        // Forms.
-        add_submenu_page(
-            'headless-forms',
-            __( 'Forms', 'headless-forms' ),
-            __( 'All Forms', 'headless-forms' ),
-            'manage_options',
-            'headless-forms-forms',
-            array( $this, 'render_forms' )
-        );
+        // Determine current view and initialize required variables.
+        $current_view = isset( $_GET['view'] ) ? sanitize_key( $_GET['view'] ) : 'dashboard';
 
-        // Add New Form.
-        add_submenu_page(
-            'headless-forms',
-            __( 'Add New Form', 'headless-forms' ),
-            __( 'Add New', 'headless-forms' ),
-            'manage_options',
-            'headless-forms-new',
-            array( $this, 'render_form_edit' )
-        );
+        // Initialize variables based on view.
+        switch ( $current_view ) {
+            case 'dashboard':
+                $plugin = Plugin::get_instance();
+                $analytics = $plugin->get_analytics();
+                $stats = $analytics->get_dashboard_stats();
+                $chart_data = $analytics->get_submissions_chart( 30 );
+                $recent = $analytics->get_recent_submissions( 5 );
+                break;
 
-        // Submissions.
-        add_submenu_page(
-            'headless-forms',
-            __( 'Submissions', 'headless-forms' ),
-            __( 'Submissions', 'headless-forms' ),
-            'manage_options',
-            'headless-forms-submissions',
-            array( $this, 'render_submissions' )
-        );
+            case 'forms':
+                $forms_table = new Forms_Table();
+                $forms_table->prepare_items();
+                break;
 
-        // Email Logs.
-        add_submenu_page(
-            'headless-forms',
-            __( 'Email Logs', 'headless-forms' ),
-            __( 'Email Logs', 'headless-forms' ),
-            'manage_options',
-            'headless-forms-logs',
-            array( $this, 'render_email_logs' )
-        );
+            case 'new-form':
+            case 'edit-form':
+                $form_id = isset( $_GET['form_id'] ) ? (int) $_GET['form_id'] : 0;
+                $form = null;
+                if ( $form_id ) {
+                    global $wpdb;
+                    $table = $wpdb->prefix . 'headless_forms';
+                    $form = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $form_id ) );
+                }
+                break;
 
-        // Settings.
-        add_submenu_page(
-            'headless-forms',
-            __( 'Settings', 'headless-forms' ),
-            __( 'Settings', 'headless-forms' ),
-            'manage_options',
-            'headless-forms-settings',
-            array( $this, 'render_settings' )
-        );
+            case 'submissions':
+                if ( isset( $_GET['submission_id'] ) ) {
+                    $current_view = 'submission-detail';
+                    global $wpdb;
+                    $submission_id = (int) $_GET['submission_id'];
+                    $subs_table = $wpdb->prefix . 'headless_submissions';
+                    $forms_tbl = $wpdb->prefix . 'headless_forms';
+                    $submission = $wpdb->get_row(
+                        $wpdb->prepare(
+                            "SELECT s.*, f.form_name FROM {$subs_table} s LEFT JOIN {$forms_tbl} f ON s.form_id = f.id WHERE s.id = %d",
+                            $submission_id
+                        )
+                    );
+                    if ( $submission ) {
+                        $submission->submission_data = json_decode( $submission->submission_data, true );
+                        $submission->meta_data = json_decode( $submission->meta_data, true );
+                        if ( $submission->status === 'new' ) {
+                            $wpdb->update( $subs_table, array( 'status' => 'read', 'read_at' => current_time( 'mysql' ) ), array( 'id' => $submission_id ) );
+                        }
+                    }
+                } else {
+                    $submissions_table = new Submissions_Table();
+                    $submissions_table->prepare_items();
+                }
+                break;
+
+            case 'email-logs':
+                $logs_table = new Email_Logs_Table();
+                $logs_table->prepare_items();
+                break;
+
+            case 'settings':
+                $plugin = Plugin::get_instance();
+                $email_factory = $plugin->get_email_factory();
+                $providers = $email_factory->get_all_providers();
+                $current_provider = get_option( 'headless_forms_email_provider', 'wp_mail' );
+                $api_key = get_option( 'headless_forms_api_key', '' );
+                break;
+
+            case 'how-to':
+            default:
+                // No special initialization needed.
+                break;
+        }
+
+        include HEADLESS_FORMS_PATH . 'admin/views/layout.php';
     }
 
     /**
@@ -322,6 +371,16 @@ class Admin_Dashboard {
     }
 
     /**
+     * Render how to use page.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function render_how_to() {
+        include HEADLESS_FORMS_PATH . 'admin/views/how-to-use.php';
+    }
+
+    /**
      * Render settings page.
      *
      * @since 1.0.0
@@ -388,7 +447,7 @@ class Admin_Dashboard {
             $redirect_id = $wpdb->insert_id;
         }
 
-        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms-new&form_id=' . $redirect_id . '&saved=1' ) );
+        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=edit-form&form_id=' . $redirect_id . '&saved=1' ) );
         exit;
     }
 
@@ -416,7 +475,7 @@ class Admin_Dashboard {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->delete( $wpdb->prefix . 'headless_webhooks', array( 'form_id' => $form_id ) );
 
-        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms-forms&deleted=1' ) );
+        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=forms&deleted=1' ) );
         exit;
     }
 
@@ -448,7 +507,7 @@ class Admin_Dashboard {
             $wpdb->insert( $table, $form );
         }
 
-        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms-forms&duplicated=1' ) );
+        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=forms&duplicated=1' ) );
         exit;
     }
 
@@ -494,7 +553,7 @@ class Admin_Dashboard {
         update_option( 'headless_forms_keep_data_on_delete', isset( $_POST['keep_data_on_delete'] ) );
         update_option( 'headless_forms_data_retention_days', (int) $_POST['data_retention_days'] );
 
-        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms-settings&saved=1' ) );
+        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=settings&saved=1' ) );
         exit;
     }
 
@@ -622,5 +681,70 @@ class Admin_Dashboard {
         update_option( 'headless_forms_api_key', $new_key );
 
         wp_send_json_success( array( 'api_key' => $new_key ) );
+    }
+
+    /**
+     * AJAX: Save webhook.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function ajax_save_webhook() {
+        check_ajax_referer( 'headless_forms_admin', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Unauthorized', 'headless-forms' ) ) );
+        }
+
+        $plugin = Plugin::get_instance();
+        $handler = $plugin->get_webhook_handler();
+
+        $data = array(
+            'form_id'          => (int) $_POST['form_id'],
+            'webhook_name'     => sanitize_text_field( $_POST['webhook_name'] ),
+            'webhook_url'      => esc_url_raw( $_POST['webhook_url'] ),
+            'trigger_event'    => sanitize_text_field( $_POST['trigger_event'] ),
+            'payload_template' => isset( $_POST['payload_template'] ) ? wp_kses_post( $_POST['payload_template'] ) : '',
+            'is_active'        => 1,
+        );
+        
+        // Handle presets
+        if ( isset( $_POST['preset'] ) && $_POST['preset'] === 'slack' ) {
+            // Logic to format payload template if needed, or JS handles it.
+        }
+
+        $id = $handler->create( $data ); // create() handles insertion.
+
+        if ( $id ) {
+            wp_send_json_success( array( 'id' => $id, 'message' => 'Integration saved' ) );
+        } else {
+            wp_send_json_error( array( 'message' => 'Failed to save integration' ) );
+        }
+    }
+
+    /**
+     * AJAX: Delete webhook.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function ajax_delete_webhook() {
+        check_ajax_referer( 'headless_forms_admin', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Unauthorized', 'headless-forms' ) ) );
+        }
+
+        $plugin = Plugin::get_instance();
+        $handler = $plugin->get_webhook_handler();
+        
+        $id = (int) $_POST['webhook_id'];
+        $success = $handler->delete( $id );
+
+        if ( $success ) {
+            wp_send_json_success();
+        } else {
+            wp_send_json_error( array( 'message' => 'Failed to delete' ) );
+        }
     }
 }

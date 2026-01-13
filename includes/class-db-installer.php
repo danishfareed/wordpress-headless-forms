@@ -186,6 +186,7 @@ class DB_Installer {
             error_code varchar(100) DEFAULT NULL,
             retry_count int(11) NOT NULL DEFAULT 0,
             max_retries int(11) NOT NULL DEFAULT 3,
+            provider_message_id varchar(255) DEFAULT NULL,
             provider_response longtext DEFAULT NULL,
             sent_at datetime DEFAULT NULL,
             next_retry_at datetime DEFAULT NULL,

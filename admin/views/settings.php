@@ -16,11 +16,17 @@ $keep_data = get_option( 'headless_forms_keep_data_on_delete', false );
 $retention_days = get_option( 'headless_forms_data_retention_days', 365 );
 $provider_settings = get_option( 'headless_forms_provider_settings', array() );
 ?>
-<div class="wrap hf-wrap">
-    <h1><?php esc_html_e( 'Settings', 'headless-forms' ); ?></h1>
+
+<!-- Page Header -->
+<div class="hf-page-header">
+    <h2 class="hf-page-title">
+        <span class="dashicons dashicons-admin-settings"></span>
+        <?php esc_html_e( 'Settings', 'headless-forms' ); ?>
+    </h2>
+</div>
 
     <?php if ( isset( $_GET['saved'] ) ) : ?>
-        <div class="notice notice-success is-dismissible">
+        <div class="notice notice-success is-dismissible" style="margin-left: 0;">
             <p><?php esc_html_e( 'Settings saved successfully.', 'headless-forms' ); ?></p>
         </div>
     <?php endif; ?>
@@ -37,11 +43,11 @@ $provider_settings = get_option( 'headless_forms_provider_settings', array() );
                     <th><label><?php esc_html_e( 'API Key', 'headless-forms' ); ?></label></th>
                     <td>
                         <div class="hf-api-key-wrap">
-                            <input type="text" id="hf-api-key" value="<?php echo esc_attr( $api_key ); ?>" readonly class="regular-text code">
-                            <button type="button" class="button hf-copy-btn" data-copy="hf-api-key">
+                            <input type="text" id="hf-api-key" value="<?php echo esc_attr( $api_key ); ?>" readonly class="regular-text code" style="background: #f1f5f9; border: 1px solid #cbd5e1;">
+                            <button type="button" class="hf-button hf-button-secondary hf-copy-btn" data-copy="hf-api-key">
                                 <span class="dashicons dashicons-admin-page"></span> <?php esc_html_e( 'Copy', 'headless-forms' ); ?>
                             </button>
-                            <button type="button" class="button" id="hf-regenerate-key">
+                            <button type="button" class="hf-button hf-button-secondary" id="hf-regenerate-key">
                                 <span class="dashicons dashicons-update"></span> <?php esc_html_e( 'Regenerate', 'headless-forms' ); ?>
                             </button>
                         </div>
@@ -132,7 +138,7 @@ $provider_settings = get_option( 'headless_forms_provider_settings', array() );
                 <h3><?php esc_html_e( 'Test Email', 'headless-forms' ); ?></h3>
                 <div class="hf-test-email-wrap">
                     <input type="email" id="hf-test-email" placeholder="<?php esc_attr_e( 'Enter email address', 'headless-forms' ); ?>" class="regular-text">
-                    <button type="button" id="hf-send-test" class="button button-secondary">
+                    <button type="button" id="hf-send-test" class="hf-button hf-button-secondary">
                         <span class="dashicons dashicons-email-alt"></span> <?php esc_html_e( 'Send Test', 'headless-forms' ); ?>
                     </button>
                     <span id="hf-test-result" style="display:none;"></span>
@@ -197,9 +203,9 @@ $provider_settings = get_option( 'headless_forms_provider_settings', array() );
         </div>
 
         <p class="submit">
-            <button type="submit" name="headless_forms_save_settings" class="button button-primary button-large">
+            <button type="submit" name="headless_forms_save_settings" class="hf-button hf-button-primary">
                 <?php esc_html_e( 'Save Settings', 'headless-forms' ); ?>
             </button>
         </p>
     </form>
-</div>
+

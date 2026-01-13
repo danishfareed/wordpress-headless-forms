@@ -64,6 +64,14 @@ class Plugin {
     private $webhook_handler = null;
 
     /**
+     * Webhook Listener instance (Incoming).
+     *
+     * @since 1.0.0
+     * @var Webhook_Listener|null
+     */
+    private $webhook_listener = null;
+
+    /**
      * Email Logger instance.
      *
      * @since 1.0.0
@@ -181,6 +189,9 @@ class Plugin {
         // Initialize Webhook Handler.
         $this->webhook_handler = new Webhook_Handler();
 
+        // Initialize Webhook Listener.
+        $this->webhook_listener = new Webhook_Listener( $this->email_logger );
+
         // Initialize GDPR Handler.
         $this->gdpr_handler = new GDPR_Handler();
 
@@ -233,6 +244,8 @@ class Plugin {
     public function init_rest_api() {
         $this->api_handler = new API_Handler( $this->email_factory, $this->webhook_handler, $this->email_logger );
         $this->api_handler->register_routes();
+        
+        $this->webhook_listener->register_routes();
     }
 
     /**
@@ -267,7 +280,7 @@ class Plugin {
      */
     public function add_action_links( $links ) {
         $plugin_links = array(
-            '<a href="' . esc_url( admin_url( 'admin.php?page=headless-forms-settings' ) ) . '">' . esc_html__( 'Settings', 'headless-forms' ) . '</a>',
+            '<a href="' . esc_url( admin_url( 'admin.php?page=headless-forms&view=settings' ) ) . '">' . esc_html__( 'Settings', 'headless-forms' ) . '</a>',
         );
         return array_merge( $plugin_links, $links );
     }

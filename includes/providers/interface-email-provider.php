@@ -33,7 +33,7 @@ interface Email_Provider_Interface {
      * @param string       $subject Email subject.
      * @param string       $message Email body (HTML).
      * @param array|string $headers Optional. Additional headers.
-     * @return bool True if sent successfully, false otherwise.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
     public function send( $to, $subject, $message, $headers = array() );
 

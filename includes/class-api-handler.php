@@ -580,17 +580,30 @@ class API_Handler {
                 continue;
             }
 
-            $sent = $this->email_factory->send( $recipient, $subject, $message, $headers );
+            $result = $this->email_factory->send( $recipient, $subject, $message, $headers );
+
+            // Handle new array return type or legacy bool.
+            if ( is_array( $result ) ) {
+                $sent = $result['success'];
+                $error_message = $result['error'];
+                $message_id = $result['message_id'];
+            } else {
+                $sent = (bool) $result;
+                $error_message = $sent ? '' : 'Unknown error';
+                $message_id = null;
+            }
 
             // Log email.
             $this->email_logger->log( array(
-                'submission_id'  => $submission_id,
-                'form_id'        => $form->id,
-                'email_type'     => 'notification',
-                'provider'       => get_option( 'headless_forms_email_provider', 'wp_mail' ),
-                'recipient'      => $recipient,
-                'subject'        => $subject,
-                'status'         => $sent ? 'sent' : 'failed',
+                'submission_id'       => $submission_id,
+                'form_id'             => $form->id,
+                'email_type'          => 'notification',
+                'provider'            => get_option( 'headless_forms_email_provider', 'wp_mail' ),
+                'recipient'           => $recipient,
+                'subject'             => $subject,
+                'status'              => $sent ? 'sent' : 'failed',
+                'error_message'       => $error_message,
+                'provider_message_id' => $message_id,
             ) );
 
             if ( $sent ) {
@@ -646,17 +659,30 @@ class API_Handler {
 
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
 
-        $sent = $this->email_factory->send( $recipient, $subject, $message, $headers );
+        $result = $this->email_factory->send( $recipient, $subject, $message, $headers );
+
+        // Handle new array return type or legacy bool.
+        if ( is_array( $result ) ) {
+            $sent = $result['success'];
+            $error_message = $result['error'];
+            $message_id = $result['message_id'];
+        } else {
+            $sent = (bool) $result;
+            $error_message = $sent ? '' : 'Unknown error';
+            $message_id = null;
+        }
 
         // Log auto-responder.
         $this->email_logger->log( array(
-            'submission_id' => $submission_id,
-            'form_id'       => $form->id,
-            'email_type'    => 'auto_responder',
-            'provider'      => get_option( 'headless_forms_email_provider', 'wp_mail' ),
-            'recipient'     => $recipient,
-            'subject'       => $subject,
-            'status'        => $sent ? 'sent' : 'failed',
+            'submission_id'       => $submission_id,
+            'form_id'             => $form->id,
+            'email_type'          => 'auto_responder',
+            'provider'            => get_option( 'headless_forms_email_provider', 'wp_mail' ),
+            'recipient'           => $recipient,
+            'subject'             => $subject,
+            'status'              => $sent ? 'sent' : 'failed',
+            'error_message'       => $error_message,
+            'provider_message_id' => $message_id,
         ) );
 
         return $sent;

@@ -75,6 +75,7 @@ class Email_Logger {
                 'error_code'        => $data['error_code'],
                 'retry_count'       => $data['retry_count'],
                 'max_retries'       => $data['max_retries'],
+                'provider_message_id' => isset( $data['provider_message_id'] ) ? $data['provider_message_id'] : null,
                 'provider_response' => $data['provider_response'],
                 'sent_at'           => $data['sent_at'],
                 'created_at'        => $data['created_at'],
@@ -164,22 +165,35 @@ class Email_Logger {
         foreach ( $failed as $log ) {
             $headers = json_decode( $log->headers, true ) ?: array();
 
-            $sent = $email_factory->send(
+            $result = $email_factory->send(
                 $log->recipient,
                 $log->subject,
                 $log->message_body,
                 $headers
             );
 
+            // Handle new array return type or legacy bool.
+            if ( is_array( $result ) ) {
+                $sent = $result['success'];
+                $error_message = $result['error'];
+                $message_id = $result['message_id'];
+            } else {
+                $sent = (bool) $result;
+                $error_message = $sent ? '' : 'Unknown error (legacy provider)';
+                $message_id = null;
+            }
+
             // Update log.
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
             $wpdb->update(
                 $table,
                 array(
-                    'status'        => $sent ? 'sent' : 'failed',
-                    'retry_count'   => $log->retry_count + 1,
-                    'sent_at'       => $sent ? current_time( 'mysql' ) : null,
-                    'next_retry_at' => $sent ? null : gmdate( 'Y-m-d H:i:s', strtotime( '+' . pow( 2, $log->retry_count + 1 ) . ' minutes' ) ),
+                    'status'              => $sent ? 'sent' : 'failed',
+                    'error_message'       => $error_message,
+                    'provider_message_id' => $message_id,
+                    'retry_count'         => $log->retry_count + 1,
+                    'sent_at'             => $sent ? current_time( 'mysql' ) : null,
+                    'next_retry_at'       => $sent ? null : gmdate( 'Y-m-d H:i:s', strtotime( '+' . pow( 2, $log->retry_count + 1 ) . ' minutes' ) ),
                 ),
                 array( 'id' => $log->id )
             );
