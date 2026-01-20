@@ -121,7 +121,7 @@ if ( $form ) {
                 <div class="hf-form-group">
                     <div class="hf-checkbox-group">
                         <input type="checkbox" id="file_uploads_enabled" name="file_uploads_enabled" value="1" 
-                               <?php checked( $form ? $form->file_uploads_enabled : 0 ); ?>>
+                               <?php checked( $form ? $form->file_uploads_enabled : 1 ); ?>>
                         <label for="file_uploads_enabled" class="hf-checkbox-label">
                             <?php esc_html_e( 'Enable file uploads for this form', 'headless-forms' ); ?>
                         </label>
@@ -131,11 +131,11 @@ if ( $form ) {
                     </div>
                 </div>
 
-                <div id="file-upload-settings" style="<?php echo ( $form && $form->file_uploads_enabled ) ? '' : 'display:none;'; ?> margin-top: 16px;">
+                <div id="file-upload-settings" style="<?php echo ( $form ? ( $form->file_uploads_enabled ? '' : 'display:none;' ) : '' ); ?> margin-top: 16px;">
                     <div class="hf-form-group">
                         <label class="hf-label" for="max_file_uploads"><?php esc_html_e( 'Max Files per Submission', 'headless-forms' ); ?></label>
                         <input type="number" id="max_file_uploads" name="max_file_uploads" min="1" max="10" step="1"
-                               value="<?php echo esc_attr( $form ? $form->max_file_uploads : 1 ); ?>">
+                               value="<?php echo esc_attr( $form ? $form->max_file_uploads : 5 ); ?>">
                         <div class="hf-form-hint"><?php esc_html_e( 'Maximum number of files allowed in a single submission (max 10).', 'headless-forms' ); ?></div>
                     </div>
 

@@ -273,7 +273,9 @@ class Webhook_Handler {
                 'last_status'         => $success ? 'success' : 'failed',
                 'last_response_code'  => $response_code,
             ),
-            array( 'id' => $webhook_id )
+            array( 'id' => $webhook_id ),
+            array( '%s', '%s', '%d' ),
+            array( '%d' )
         );
     }
 
@@ -337,7 +339,8 @@ class Webhook_Handler {
                 'max_retries'      => $data['max_retries'] ?? 3,
                 'timeout_seconds'  => $data['timeout_seconds'] ?? 30,
                 'created_at'       => current_time( 'mysql' ),
-            )
+            ),
+            array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s' )
         );
 
         return $result ? $wpdb->insert_id : false;

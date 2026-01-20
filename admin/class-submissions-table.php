@@ -45,6 +45,7 @@ class Submissions_Table extends \WP_List_Table {
             'id'         => __( 'ID', 'headless-forms' ),
             'form_name'  => __( 'Form', 'headless-forms' ),
             'data'       => __( 'Data', 'headless-forms' ),
+            'files'      => __( 'Files', 'headless-forms' ),
             'status'     => __( 'Status', 'headless-forms' ),
             'ip_address' => __( 'IP', 'headless-forms' ),
             'created_at' => __( 'Submitted', 'headless-forms' ),
@@ -179,6 +180,28 @@ class Submissions_Table extends \WP_List_Table {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
         $this->items = $wpdb->get_results( $wpdb->prepare( $sql, $query_values ) );
 
+        // Pre-fetch uploads for current view.
+        if ( ! empty( $this->items ) ) {
+            $submission_ids = wp_list_pluck( $this->items, 'id' );
+            $uploads_table = $wpdb->prefix . 'headless_uploads';
+            $placeholders = implode( ',', array_fill( 0, count( $submission_ids ), '%d' ) );
+            
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $uploads = $wpdb->get_results( $wpdb->prepare(
+                "SELECT * FROM {$uploads_table} WHERE submission_id IN ($placeholders)",
+                $submission_ids
+            ) );
+
+            $uploads_map = array();
+            foreach ( $uploads as $upload ) {
+                $uploads_map[ $upload->submission_id ][] = $upload;
+            }
+
+            foreach ( $this->items as &$item ) {
+                $item->uploads = isset( $uploads_map[ $item->id ] ) ? $uploads_map[ $item->id ] : array();
+            }
+        }
+
         $this->set_pagination_args( array(
             'total_items' => $total_items,
             'per_page'    => $per_page,
@@ -263,6 +286,34 @@ class Submissions_Table extends \WP_List_Table {
         $view_url = admin_url( 'admin.php?page=headless-forms&view=submissions&submission_id=' . $item->id );
 
         return implode( '<br>', $preview ) . $more . '<br><a href="' . esc_url( $view_url ) . '">' . esc_html__( 'View Details', 'headless-forms' ) . ' →</a>';
+    }
+
+    /**
+     * Files column.
+     *
+     * @param object $item Item.
+     * @return string
+     */
+    public function column_files( $item ) {
+        if ( empty( $item->uploads ) ) {
+            return '<span class="dashicons dashicons-no-alt" style="color:#cbd5e1;" title="' . esc_attr__( 'No files', 'headless-forms' ) . '"></span>';
+        }
+
+        $links = array();
+        foreach ( $item->uploads as $file ) {
+            $url = wp_nonce_url( 
+                admin_url( 'admin-post.php?action=headless_forms_download&file_id=' . $file->id ), 
+                'download_file_' . $file->id 
+            );
+            $links[] = sprintf(
+                '<a href="%s" title="%s"><span class="dashicons dashicons-paperclip" style="font-size:16px; width:16px; height:16px; vertical-align:text-bottom; margin-right:4px;"></span>%s</a>',
+                esc_url( $url ),
+                esc_attr( $file->file_name ),
+                esc_html( strlen( $file->file_name ) > 15 ? substr( $file->file_name, 0, 15 ) . '...' : $file->file_name )
+            );
+        }
+
+        return implode( '<br>', $links );
     }
 
     /**

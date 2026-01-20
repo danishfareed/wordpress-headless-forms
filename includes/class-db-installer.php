@@ -108,7 +108,7 @@ class DB_Installer {
             redirect_url varchar(500) DEFAULT NULL,
             allowed_origins text DEFAULT NULL,
             field_mapping longtext DEFAULT NULL,
-            file_uploads_enabled tinyint(1) NOT NULL DEFAULT 0,
+            file_uploads_enabled tinyint(1) NOT NULL DEFAULT 1,
             max_file_uploads int(11) NOT NULL DEFAULT 5,
             status varchar(20) NOT NULL DEFAULT 'active',
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,

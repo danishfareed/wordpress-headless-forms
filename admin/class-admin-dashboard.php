@@ -524,7 +524,7 @@ class Admin_Dashboard {
             $form['updated_at'] = current_time( 'mysql' );
 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-            $wpdb->insert( $table, $form );
+            $wpdb->insert( $table, $form, array( '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s' ) );
         }
 
         wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=forms&duplicated=1' ) );
