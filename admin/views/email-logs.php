@@ -21,6 +21,8 @@ defined( 'ABSPATH' ) || exit;
     <form method="get">
         <input type="hidden" name="page" value="headless-forms">
         <input type="hidden" name="view" value="email-logs">
-        <?php $logs_table->display(); ?>
+        <div class="hf-table-container">
+            <?php $logs_table->display(); ?>
+        </div>
     </form>
 </div>

@@ -108,6 +108,41 @@ if ( $form ) {
                 </div>
             </div>
 
+            <!-- File Uploads -->
+            <div class="hf-card">
+                <h2><?php esc_html_e( 'File Uploads', 'headless-forms' ); ?></h2>
+                
+                <div class="hf-form-group">
+                    <div class="hf-checkbox-group">
+                        <input type="checkbox" id="file_uploads_enabled" name="file_uploads_enabled" value="1" 
+                               <?php checked( $form ? $form->file_uploads_enabled : 0 ); ?>>
+                        <label for="file_uploads_enabled" class="hf-checkbox-label">
+                            <?php esc_html_e( 'Enable file uploads for this form', 'headless-forms' ); ?>
+                        </label>
+                    </div>
+                    <div class="hf-form-hint">
+                        <?php esc_html_e( 'Allows users to submit files along with form data. Files are sent as attachments.', 'headless-forms' ); ?>
+                    </div>
+                </div>
+
+                <div id="file-upload-settings" style="<?php echo ( $form && $form->file_uploads_enabled ) ? '' : 'display:none;'; ?> margin-top: 16px;">
+                    <div class="hf-form-group">
+                        <label class="hf-label" for="max_file_uploads"><?php esc_html_e( 'Max Files per Submission', 'headless-forms' ); ?></label>
+                        <input type="number" id="max_file_uploads" name="max_file_uploads" min="1" max="10" step="1"
+                               value="<?php echo esc_attr( $form ? $form->max_file_uploads : 1 ); ?>">
+                        <div class="hf-form-hint"><?php esc_html_e( 'Maximum number of files allowed in a single submission (max 10).', 'headless-forms' ); ?></div>
+                    </div>
+
+                    <div class="hf-form-group" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <label class="hf-label" style="font-size: 12px; margin-bottom: 4px;"><?php esc_html_e( 'Attachment Info', 'headless-forms' ); ?></label>
+                        <div style="font-size: 13px; color: #64748b;">
+                            <p style="margin: 0 0 4px 0;"><strong><?php esc_html_e( 'Max Size:', 'headless-forms' ); ?></strong> 10MB <?php esc_html_e( 'per file', 'headless-forms' ); ?></p>
+                            <p style="margin: 0;"><strong><?php esc_html_e( 'Allowed Types:', 'headless-forms' ); ?></strong> <?php esc_html_e( 'Images, PDFs, Documents (excluding .zip)', 'headless-forms' ); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Auto Responder -->
             <div class="hf-card">
                  <h2><?php esc_html_e( 'Automated Reply', 'headless-forms' ); ?></h2>
@@ -276,32 +311,49 @@ if ( $form ) {
                 <div class="hf-form-hint"><?php esc_html_e( 'Leave empty for default submission data.', 'headless-forms' ); ?></div>
             </div>
 
+            <!-- Google Sheets Help -->
+            <div id="hf-sheets-help" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; padding:16px; border-radius:8px; margin-top:16px;">
+                <h4 style="margin:0 0 8px 0; color:#0369a1; font-size:14px;"><?php esc_html_e( 'How to connect Google Sheets:', 'headless-forms' ); ?></h4>
+                <ol style="margin:0; padding-left:20px; font-size:12px; color:#0c4a6e;">
+                    <li>Create a Google Sheet and name it.</li>
+                    <li>Go to <strong>Extensions > Apps Script</strong>.</li>
+                    <li>Paste the connection script and click <strong>Deploy > Web App</strong>.</li>
+                    <li>Set access to <strong>"Anyone"</strong> and copy the URL.</li>
+                </ol>
+                <button type="button" class="hf-button hf-button-small hf-button-secondary hf-copy-btn" data-copy="hf-sheets-script" style="margin-top:12px;">
+                    <span class="dashicons dashicons-media-code"></span> <?php esc_html_e( 'Copy Connection Script', 'headless-forms' ); ?>
+                </button>
+                <textarea id="hf-sheets-script" style="display:none;">function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  var row = [new Date()];
+  
+  // Flatten data into columns
+  for (var key in data.data) {
+    row.push(data.data[key]);
+  }
+  
+  sheet.appendRow(row);
+  return ContentService.createTextOutput(JSON.stringify({result: "success"})).setMimeType(ContentService.MimeType.JSON);
+}</textarea>
+            </div>
+
             <input type="hidden" id="int_form_id" value="<?php echo esc_attr( $form ? $form->id : '' ); ?>">
         </div>
         <div class="hf-modal-footer">
-            <button type="button" class="hf-button hf-button-secondary hf-close-modal"><?php esc_html_e( 'Cancel', 'headless-forms' ); ?></button>
+            <button type="button" class="hf-button hf-button-secondary hf-cancel-btn"><?php esc_html_e( 'Cancel', 'headless-forms' ); ?></button>
             <button type="button" class="hf-button hf-button-primary" id="hf-save-integration"><?php esc_html_e( 'Save Integration', 'headless-forms' ); ?></button>
         </div>
     </div>
 </div>
 
 <style>
+/* Remove conflicting inline styles that are already in admin.css */
 .hf-tabs { display: flex; gap: 20px; border-bottom: 2px solid transparent; }
 .hf-tab-link { text-decoration: none; color: #64748b; padding: 8px 12px; border-bottom: 2px solid transparent; font-weight: 500; transition: all 0.2s; }
 .hf-tab-link.active { color: #000; border-bottom-color: #000; }
 .hf-tab-content { display: none; }
 .hf-tab-content.active { display: block; }
-.hf-grid-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 8px; }
-.hf-grid-option { border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
-.hf-grid-option:hover { border-color: #cbd5e1; background: #f8fafc; }
-.hf-grid-option input { margin: 0; }
-.hf-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-.hf-modal-content { background: #fff; width: 500px; max-width: 90%; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
-.hf-modal-header { padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
-.hf-modal-header h3 { margin: 0; font-size: 18px; }
-.hf-close-modal { cursor: pointer; font-size: 20px; line-height: 1; }
-.hf-modal-body { padding: 24px; }
-.hf-modal-footer { padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
 </style>
 
 <script>
@@ -312,6 +364,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if(autoResponderCheck && autoResponderSettings) {
         autoResponderCheck.addEventListener('change', function() {
             autoResponderSettings.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+
+    const fileUploadsCheck = document.getElementById('file_uploads_enabled');
+    const fileUploadsSettings = document.getElementById('file-upload-settings');
+    if(fileUploadsCheck && fileUploadsSettings) {
+        fileUploadsCheck.addEventListener('change', function() {
+            fileUploadsSettings.style.display = this.checked ? 'block' : 'none';
         });
     }
 });

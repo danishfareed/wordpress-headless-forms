@@ -41,17 +41,23 @@ class Mailgun_Provider implements Email_Provider_Interface {
     /**
      * Send an email.
      *
-     * @param string       $to      Recipient.
-     * @param string       $subject Subject.
-     * @param string       $message Message.
-     * @param array|string $headers Headers.
-     * @return bool
+     * @since 1.0.0
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient.
+     * @param string       $subject     Subject.
+     * @param string       $message     Message.
+     * @param array|string $headers     Headers.
+     * @param array        $attachments Optional file attachments.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
 
         if ( empty( $settings['api_key'] ) || empty( $settings['domain'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key or Domain not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $this->security->decrypt( $settings['api_key'] );
@@ -82,6 +88,18 @@ class Mailgun_Provider implements Email_Provider_Interface {
             }
         }
 
+        // Add attachments if provided.
+        if ( ! empty( $attachments ) ) {
+            $i = 1;
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+                    $body[ 'attachment[' . $i . ']' ] = curl_file_create( $attachment['path'], $attachment['mime_type'], $attachment['name'] );
+                    $i++;
+                }
+            }
+        }
+
         $response = wp_remote_post( $endpoint, array(
             'headers' => array(
                 'Authorization' => 'Basic ' . base64_encode( 'api:' . $api_key ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
@@ -90,8 +108,23 @@ class Mailgun_Provider implements Email_Provider_Interface {
             'timeout' => 30,
         ) );
 
-        $code = wp_remote_retrieve_response_code( $response );
-        return ! is_wp_error( $response ) && $code === 200;
+        $code      = wp_remote_retrieve_response_code( $response );
+        $resp_body = wp_remote_retrieve_body( $response );
+        $success   = ! is_wp_error( $response ) && $code === 200;
+        $error     = '';
+
+        if ( is_wp_error( $response ) ) {
+            $error = $response->get_error_message();
+        } elseif ( ! $success ) {
+            $data  = json_decode( $resp_body, true );
+            $error = isset( $data['message'] ) ? $data['message'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( json_decode( $resp_body, true )['id'] ?? 'mg_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     /**
@@ -201,13 +234,13 @@ class Mailgun_Provider implements Email_Provider_Interface {
         $subject = __( 'Headless Forms - Mailgun Test', 'headless-forms' );
         $message = '<p>' . __( 'This is a test email from Headless Forms via Mailgun.', 'headless-forms' ) . '</p>';
 
-        $sent = $this->send( $to, $subject, $message );
+        $result = $this->send( $to, $subject, $message );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
+            'success' => $result['success'],
+            'message' => $result['success']
                 ? __( 'Mailgun test email sent successfully!', 'headless-forms' )
-                : __( 'Failed to send via Mailgun. Check your API key and domain.', 'headless-forms' ),
+                : $result['error'],
         );
     }
 }

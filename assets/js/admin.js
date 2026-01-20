@@ -16,11 +16,12 @@
         initRegenerateKey();
         initDeleteConfirm();
         initEndpointCopy();
-        initRegenerateKey();
-        initDeleteConfirm();
-        initEndpointCopy();
         initTabs();
         initIntegrations();
+        initSettingsSave();
+        
+        // Initial provider state
+        updateProviderVisibility($('#email_provider').val());
     });
 
     /**
@@ -37,7 +38,7 @@
         });
         
         // Close Modal
-        $('.hf-close-modal').on('click', function() {
+        $('.hf-close-modal, .hf-cancel-btn').on('click', function() {
             $modal.fadeOut(200);
         });
         
@@ -56,18 +57,22 @@
                 $name.val('Slack Notification');
                 $payloadGroup.show();
                 $payload.val('{\n  "text": "New submission from *{{form_name}}*:\\n{{all_fields}}"\n}');
+                $('#hf-sheets-help').hide();
             } else if (preset === 'sheets') {
                 $name.val('Google Sheets');
                 $payloadGroup.hide();
                 $payload.val('');
+                $('#hf-sheets-help').show();
             } else if (preset === 'zapier') {
                 $name.val('Zapier Webhook');
                 $payloadGroup.hide();
                 $payload.val('');
+                $('#hf-sheets-help').hide();
             } else {
                 $name.val('Custom Webhook');
                 $payloadGroup.show();
                 $payload.val('');
+                $('#hf-sheets-help').hide();
             }
         });
         
@@ -208,16 +213,22 @@
      */
     function initProviderSwitcher() {
         $('#email_provider').on('change', function() {
-            var provider = $(this).val();
-            
-            // Hide all provider settings.
-            $('.hf-provider-settings').hide();
-            $('.hf-help-link').hide();
-            
-            // Show selected provider settings.
-            $('.hf-provider-settings[data-provider="' + provider + '"]').show();
-            $('.hf-help-link[data-provider="' + provider + '"]').show();
+            updateProviderVisibility($(this).val());
         });
+    }
+
+    /**
+     * Update provider settings visibility and enable/disable inputs.
+     */
+    function updateProviderVisibility(provider) {
+        // Hide all provider settings and disable their inputs.
+        $('.hf-provider-settings').hide().find('input, select, textarea').prop('disabled', true);
+        $('.hf-help-link').hide();
+        
+        // Show selected provider settings and enable its inputs.
+        var $active = $('.hf-provider-settings[data-provider="' + provider + '"]');
+        $active.show().find('input, select, textarea').prop('disabled', false);
+        $('.hf-help-link[data-provider="' + provider + '"]').show();
     }
 
     /**
@@ -251,15 +262,15 @@
                 success: function(response) {
                     if (response.success) {
                         $result.removeClass('error').addClass('success')
-                            .text(response.data.message).show();
+                            .html('<span class="dashicons dashicons-yes"></span> <strong>' + headlessFormsAdmin.strings.testEmailSuccess + '</strong> ' + response.data.message).show();
                     } else {
                         $result.removeClass('success').addClass('error')
-                            .text(response.data.message).show();
+                            .html('<span class="dashicons dashicons-warning"></span> <strong>' + headlessFormsAdmin.strings.testEmailError + ':</strong> ' + response.data.message).show();
                     }
                 },
                 error: function() {
                     $result.removeClass('success').addClass('error')
-                        .text('An error occurred. Please try again.').show();
+                        .text(headlessFormsAdmin.strings.genericError).show();
                 },
                 complete: function() {
                     $btn.prop('disabled', false).html('<span class="dashicons dashicons-email-alt"></span> Send Test');
@@ -367,5 +378,46 @@
             }
         });
     });
+
+    /**
+     * Settings save AJAX.
+     */
+    function initSettingsSave() {
+        $('.hf-settings-form').on('submit', function(e) {
+            e.preventDefault();
+            
+            var $form = $(this);
+            var $btn = $form.find('button[name="headless_forms_save_settings"]');
+            var formData = $form.serialize();
+            
+            // Add action and nonce
+            formData += '&action=headless_forms_save_settings&nonce=' + headlessFormsAdmin.nonce;
+            
+            $btn.prop('disabled', true).addClass('hf-button-secondary').text(headlessFormsAdmin.strings.saving);
+            
+            $.ajax({
+                url: headlessFormsAdmin.ajaxUrl,
+                type: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        $btn.removeClass('hf-button-secondary').addClass('hf-button-success').text(headlessFormsAdmin.strings.saved);
+                        
+                        setTimeout(function() {
+                            $btn.removeClass('hf-button-success').addClass('hf-button-primary').text(headlessFormsAdmin.strings.saveSettings);
+                            $btn.prop('disabled', false);
+                        }, 3000);
+                    } else {
+                        alert(response.data.message || 'Error saving settings.');
+                        $btn.prop('disabled', false).text(headlessFormsAdmin.strings.saveSettings);
+                    }
+                },
+                error: function() {
+                    alert('An error occurred while saving.');
+                    $btn.prop('disabled', false).text(headlessFormsAdmin.strings.saveSettings);
+                }
+            });
+        });
+    }
 
 })(jQuery);

@@ -74,6 +74,14 @@ class API_Handler {
     private $email_logger;
 
     /**
+     * File handler instance.
+     *
+     * @since 1.1.0
+     * @var File_Handler
+     */
+    private $file_handler;
+
+    /**
      * Constructor.
      *
      * @since 1.0.0
@@ -87,6 +95,7 @@ class API_Handler {
         $this->email_factory   = $email_factory;
         $this->webhook_handler = $webhook_handler;
         $this->email_logger    = $email_logger;
+        $this->file_handler    = new File_Handler();
     }
 
     /**
@@ -161,6 +170,9 @@ class API_Handler {
      * @return bool|\WP_Error True if authorized, WP_Error otherwise.
      */
     public function check_permission( $request ) {
+        // Handle CORS headers.
+        $this->handle_cors_headers( $request );
+
         // Handle CORS preflight.
         if ( $request->get_method() === 'OPTIONS' ) {
             return true;
@@ -353,6 +365,17 @@ class API_Handler {
             return $sanitized_data;
         }
 
+        // Process file uploads if enabled for this form.
+        $uploaded_files = array();
+        if ( ! empty( $form->file_uploads_enabled ) && ! empty( $_FILES ) ) {
+            $max_files = isset( $form->max_file_uploads ) ? (int) $form->max_file_uploads : 5;
+            $uploaded_files = $this->file_handler->process_uploads( $_FILES, $form->id, $max_files );
+
+            if ( is_wp_error( $uploaded_files ) ) {
+                return $uploaded_files;
+            }
+        }
+
         /**
          * Action before submission is saved.
          *
@@ -410,6 +433,29 @@ class API_Handler {
 
         $submission_id = $wpdb->insert_id;
 
+        // Save uploaded files to database.
+        if ( ! empty( $uploaded_files ) ) {
+            $uploads_table = $wpdb->prefix . 'headless_uploads';
+            foreach ( $uploaded_files as $file ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+                $wpdb->insert(
+                    $uploads_table,
+                    array(
+                        'submission_id' => $submission_id,
+                        'form_id'       => $form->id,
+                        'field_name'    => isset( $file['field_name'] ) ? $file['field_name'] : '',
+                        'original_name' => $file['original_name'],
+                        'stored_name'   => $file['stored_name'],
+                        'file_path'     => $file['file_path'],
+                        'file_size'     => $file['file_size'],
+                        'mime_type'     => $file['mime_type'],
+                        'created_at'    => current_time( 'mysql' ),
+                    ),
+                    array( '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
+                );
+            }
+        }
+
         /**
          * Action after submission is saved.
          *
@@ -423,7 +469,7 @@ class API_Handler {
         // Send notification email if enabled.
         $email_sent = false;
         if ( $form->notification_enabled ) {
-            $email_sent = $this->send_notification_email( $form, $sanitized_data, $submission_id );
+            $email_sent = $this->send_notification_email( $form, $sanitized_data, $submission_id, $uploaded_files );
         }
 
         // Send auto-responder if enabled.
@@ -529,12 +575,14 @@ class API_Handler {
      * Send notification email.
      *
      * @since 1.0.0
-     * @param object $form          The form object.
-     * @param array  $data          The submission data.
-     * @param int    $submission_id The submission ID.
+     * @since 1.1.0 Added $uploaded_files parameter for attachments.
+     * @param object $form           The form object.
+     * @param array  $data           The submission data.
+     * @param int    $submission_id  The submission ID.
+     * @param array  $uploaded_files Optional. Uploaded files to attach.
      * @return bool Whether email was sent.
      */
-    private function send_notification_email( $form, $data, $submission_id ) {
+    private function send_notification_email( $form, $data, $submission_id, $uploaded_files = array() ) {
         $email_settings = json_decode( $form->email_settings, true );
 
         if ( empty( $email_settings ) || empty( $email_settings['recipients'] ) ) {
@@ -546,7 +594,7 @@ class API_Handler {
             ? $this->replace_placeholders( $email_settings['subject'], $data, $form )
             : sprintf( __( 'New submission from %s', 'headless-forms' ), $form->form_name );
 
-        $message = $this->build_email_body( $data, $form );
+        $message = $this->build_email_body( $data, $form, $uploaded_files );
 
         // Get recipients.
         $recipients = is_array( $email_settings['recipients'] ) 
@@ -574,13 +622,28 @@ class API_Handler {
 
         $success = false;
 
+        // Prepare file attachments for email.
+        $attachments = array();
+        if ( ! empty( $uploaded_files ) ) {
+            foreach ( $uploaded_files as $file ) {
+                $file_path = $this->file_handler->get_full_path( $file['file_path'] );
+                if ( file_exists( $file_path ) ) {
+                    $attachments[] = array(
+                        'path'      => $file_path,
+                        'name'      => $file['original_name'],
+                        'mime_type' => $file['mime_type'],
+                    );
+                }
+            }
+        }
+
         foreach ( $recipients as $recipient ) {
             $recipient = sanitize_email( trim( $recipient ) );
             if ( empty( $recipient ) ) {
                 continue;
             }
 
-            $result = $this->email_factory->send( $recipient, $subject, $message, $headers );
+            $result = $this->email_factory->send( $recipient, $subject, $message, $headers, $attachments );
 
             // Handle new array return type or legacy bool.
             if ( is_array( $result ) ) {
@@ -692,11 +755,13 @@ class API_Handler {
      * Build email body from submission data.
      *
      * @since 1.0.0
-     * @param array  $data The submission data.
-     * @param object $form The form object.
+     * @since 1.1.0 Added $uploaded_files parameter.
+     * @param array  $data           The submission data.
+     * @param object $form           The form object.
+     * @param array  $uploaded_files Optional. Uploaded files to mention.
      * @return string The email body HTML.
      */
-    private function build_email_body( $data, $form ) {
+    private function build_email_body( $data, $form, $uploaded_files = array() ) {
         $html = '<html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">';
         $html .= '<div style="max-width: 600px; margin: 0 auto; padding: 20px;">';
         $html .= '<h2 style="color: #2271b1; border-bottom: 2px solid #2271b1; padding-bottom: 10px;">';
@@ -719,6 +784,28 @@ class API_Handler {
         }
 
         $html .= '</table>';
+
+        // Add file attachments section if present.
+        if ( ! empty( $uploaded_files ) ) {
+            $html .= '<div style="margin-top: 20px; padding: 15px; background-color: #f0f6fc; border-radius: 4px;">';
+            $html .= '<h3 style="margin: 0 0 10px 0; color: #2271b1; font-size: 14px;">';
+            $html .= sprintf(
+                /* translators: %d: Number of attached files */
+                _n( '%d File Attached', '%d Files Attached', count( $uploaded_files ), 'headless-forms' ),
+                count( $uploaded_files )
+            );
+            $html .= '</h3>';
+            $html .= '<ul style="margin: 0; padding-left: 20px;">';
+            foreach ( $uploaded_files as $file ) {
+                $html .= '<li style="margin-bottom: 5px;">';
+                $html .= esc_html( $file['original_name'] );
+                $html .= ' <span style="color: #666;">(' . size_format( $file['file_size'] ) . ')</span>';
+                $html .= '</li>';
+            }
+            $html .= '</ul>';
+            $html .= '</div>';
+        }
+
         $html .= '<p style="margin-top: 30px; color: #666; font-size: 12px;">';
         $html .= sprintf(
             __( 'This submission was received on %s via Headless Forms.', 'headless-forms' ),
@@ -863,5 +950,27 @@ class API_Handler {
             'success' => true,
             'deleted' => $deleted,
         ), 200 );
+    }
+
+    /**
+     * Handle CORS headers for the response.
+     *
+     * @since 1.0.0
+     * @param \WP_REST_Request $request The REST request.
+     * @return void
+     */
+    private function handle_cors_headers( $request ) {
+        $origin = $request->get_header( 'Origin' );
+
+        if ( empty( $origin ) ) {
+            return;
+        }
+
+        if ( $this->security->validate_cors_origin( $origin ) ) {
+            header( 'Access-Control-Allow-Origin: ' . esc_url_raw( $origin ) );
+            header( 'Access-Control-Allow-Methods: POST, GET, OPTIONS, DELETE' );
+            header( 'Access-Control-Allow-Headers: Content-Type, X-HF-API-Key, Authorization' );
+            header( 'Access-Control-Allow-Credentials: true' );
+        }
     }
 }

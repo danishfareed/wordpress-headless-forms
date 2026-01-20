@@ -26,6 +26,7 @@ if ( ! $keep_data ) {
         $wpdb->prefix . 'headless_submissions',
         $wpdb->prefix . 'headless_email_logs',
         $wpdb->prefix . 'headless_webhooks',
+        $wpdb->prefix . 'headless_uploads',
     );
 
     foreach ( $tables as $table ) {
@@ -88,6 +89,28 @@ if ( ! $keep_data ) {
             'headless_forms_%'
         )
     );
+
+    // Delete uploaded files.
+    $upload_dir = wp_upload_dir();
+    $hf_upload_path = trailingslashit( $upload_dir['basedir'] ) . 'headless-forms';
+
+    if ( is_dir( $hf_upload_path ) ) {
+        // Simple recursive deletion helper.
+        $delete_recursive = function( $path ) use ( &$delete_recursive ) {
+            if ( ! is_dir( $path ) ) {
+                return unlink( $path );
+            }
+            $items = scandir( $path );
+            foreach ( $items as $item ) {
+                if ( $item === '.' || $item === '..' ) {
+                    continue;
+                }
+                $delete_recursive( $path . DIRECTORY_SEPARATOR . $item );
+            }
+            return rmdir( $path );
+        };
+        $delete_recursive( $hf_upload_path );
+    }
 }
 
 // Flush rewrite rules.

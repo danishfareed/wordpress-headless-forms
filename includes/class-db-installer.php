@@ -76,6 +76,7 @@ class DB_Installer {
         $this->create_submissions_table();
         $this->create_email_logs_table();
         $this->create_webhooks_table();
+        $this->create_uploads_table();
 
         // Update database version.
         update_option( 'headless_forms_db_version', HEADLESS_FORMS_DB_VERSION );
@@ -107,6 +108,8 @@ class DB_Installer {
             redirect_url varchar(500) DEFAULT NULL,
             allowed_origins text DEFAULT NULL,
             field_mapping longtext DEFAULT NULL,
+            file_uploads_enabled tinyint(1) NOT NULL DEFAULT 0,
+            max_file_uploads int(11) NOT NULL DEFAULT 5,
             status varchar(20) NOT NULL DEFAULT 'active',
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -114,7 +117,7 @@ class DB_Installer {
             UNIQUE KEY form_slug (form_slug),
             KEY status (status),
             KEY created_at (created_at)
-        ) {$this->charset_collate};";
+        ) {$this->charset_collate}";
 
         dbDelta( $sql );
     }
@@ -246,6 +249,37 @@ class DB_Installer {
     }
 
     /**
+     * Create the uploads table.
+     *
+     * Stores file upload metadata including original name, stored path,
+     * and associated submission.
+     *
+     * @since 1.1.0
+     * @return void
+     */
+    private function create_uploads_table() {
+        $table_name = $this->prefix . 'headless_uploads';
+
+        $sql = "CREATE TABLE {$table_name} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            submission_id bigint(20) unsigned NOT NULL,
+            form_id bigint(20) unsigned NOT NULL,
+            field_name varchar(255) DEFAULT NULL,
+            original_name varchar(255) NOT NULL,
+            stored_name varchar(255) NOT NULL,
+            file_path varchar(500) NOT NULL,
+            file_size bigint(20) unsigned NOT NULL,
+            mime_type varchar(100) NOT NULL,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY submission_id (submission_id),
+            KEY form_id (form_id)
+        ) {$this->charset_collate}";
+
+        dbDelta( $sql );
+    }
+
+    /**
      * Check if upgrade is needed.
      *
      * Compares stored DB version with current version.
@@ -308,6 +342,16 @@ class DB_Installer {
      */
     public function get_webhooks_table() {
         return $this->prefix . 'headless_webhooks';
+    }
+
+    /**
+     * Get uploads table name.
+     *
+     * @since 1.1.0
+     * @return string
+     */
+    public function get_uploads_table() {
+        return $this->prefix . 'headless_uploads';
     }
 
     /**

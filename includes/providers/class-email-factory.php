@@ -194,15 +194,17 @@ class Email_Factory {
      * Send an email using the active provider.
      *
      * @since 1.0.0
-     * @param string       $to      Recipient email.
-     * @param string       $subject Subject.
-     * @param string       $message Message body.
-     * @param array|string $headers Optional headers.
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient email.
+     * @param string       $subject     Subject.
+     * @param string       $message     Message body.
+     * @param array|string $headers     Optional headers.
+     * @param array        $attachments Optional file attachments.
      * @return bool True if sent.
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $provider = $this->get_active_provider();
-        return $provider->send( $to, $subject, $message, $headers );
+        return $provider->send( $to, $subject, $message, $headers, $attachments );
     }
 
     /**

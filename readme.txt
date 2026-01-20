@@ -5,7 +5,7 @@ Tags: headless, forms, rest api, decoupled, jamstack, api forms, contact form
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,7 @@ Unlike traditional form plugins that require WordPress themes, Headless Forms is
 * **Modern Admin UI** – Beautiful dashboard with analytics and submission management
 * **Auto-Responders** – Send confirmation emails to form submitters
 * **Email Logs** – Track delivery status with bounce handling
+* **File Uploads** – Support for attachments (images, PDFs, documents) up to 10MB
 
 = Perfect For =
 
@@ -114,7 +115,7 @@ Yes! You can set up webhooks to send submissions to Zapier, Google Sheets, Slack
 
 = Does it support file uploads? =
 
-File uploads via REST API are on our roadmap for a future release.
+Yes! As of version 1.1.0, Headless Forms supports file uploads. You can enable file uploads per form, set limits on the number of files, and files are automatically sent as email attachments. Security measures include MIME type validation, UUID renaming, and protected storage.
 
 = Can I customize the email templates? =
 
@@ -142,6 +143,14 @@ The email content is generated from the form fields. Custom HTML email templates
 * Modern admin dashboard with analytics
 * Auto-responder emails
 * Form-specific settings and notifications
+
+= 1.1.0 =
+* Added support for File Uploads in REST API submissions
+* Implementation of secure file storage with .htaccess protection
+* Added file attachment support for all major email providers (SES, SendGrid, Mailgun, Resend, WP Mail)
+* Added file management in Admin Dashboard (view and download)
+* Added 'Uploaded Files' column to submission CSV export
+* Added cleanup logic for uploaded files on plugin uninstallation
 
 == Upgrade Notice ==
 

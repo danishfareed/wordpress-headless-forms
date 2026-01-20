@@ -28,14 +28,63 @@ class WP_Mail_Provider implements Email_Provider_Interface {
      * Send an email.
      *
      * @since 1.0.0
-     * @param string       $to      Recipient email address.
-     * @param string       $subject Email subject.
-     * @param string       $message Email body.
-     * @param array|string $headers Optional headers.
-     * @return bool True if sent.
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient email address.
+     * @param string       $subject     Email subject.
+     * @param string       $message     Email body.
+     * @param array|string $headers     Optional headers.
+     * @param array        $attachments Optional file attachments.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
-        return wp_mail( $to, $subject, $message, $headers );
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
+        $last_error = '';
+        $capture_error = function( $error ) use ( &$last_error ) {
+            if ( is_wp_error( $error ) ) {
+                $last_error = $error->get_error_message();
+            }
+        };
+        
+        // Capture wp_mail errors.
+        add_action( 'wp_mail_failed', $capture_error );
+
+        // Prepare attachments for wp_mail (expects array of file paths).
+        $wp_attachments = array();
+        if ( ! empty( $attachments ) ) {
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $wp_attachments[] = $attachment['path'];
+                }
+            }
+        }
+
+        $sent = wp_mail( $to, $subject, $message, $headers, $wp_attachments );
+
+        remove_action( 'wp_mail_failed', $capture_error );
+
+        return array(
+            'success'    => $sent,
+            'message_id' => $sent ? 'wp_mail_' . time() : '',
+            'error'      => $sent ? '' : $this->get_helpful_error( $last_error ),
+        );
+    }
+
+    /**
+     * Provide more context for common WordPress mail errors.
+     *
+     * @since 1.0.0
+     * @param string $error Original error message.
+     * @return string
+     */
+    private function get_helpful_error( $error ) {
+        if ( empty( $error ) ) {
+            return __( 'WordPress was unable to send the email. This usually happens when the server has the PHP mail() function disabled.', 'headless-forms' );
+        }
+
+        if ( stripos( $error, 'Could not instantiate mail function' ) !== false ) {
+            return $error . ' ' . __( 'Reason: Your server is not configured to send emails using the default method. Tip: Use an SMTP or API-based provider (like SendGrid or Mailgun) to fix this.', 'headless-forms' );
+        }
+
+        return $error;
     }
 
     /**
@@ -118,13 +167,13 @@ class WP_Mail_Provider implements Email_Provider_Interface {
         );
 
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
-        $sent = $this->send( $to, $subject, $message, $headers );
+        $result  = $this->send( $to, $subject, $message, $headers );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
+            'success' => $result['success'],
+            'message' => $result['success']
                 ? __( 'Test email sent successfully!', 'headless-forms' )
-                : __( 'Failed to send test email. Check your WordPress mail configuration.', 'headless-forms' ),
+                : $result['error'],
         );
     }
 }

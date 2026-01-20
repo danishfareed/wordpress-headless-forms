@@ -51,17 +51,22 @@ class Resend_Provider implements Email_Provider_Interface {
      * Send an email.
      *
      * @since 1.0.0
-     * @param string       $to      Recipient.
-     * @param string       $subject Subject.
-     * @param string       $message Message.
-     * @param array|string $headers Headers.
-     * @return bool
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient.
+     * @param string       $subject     Subject.
+     * @param string       $message     Message.
+     * @param array|string $headers     Headers.
+     * @param array        $attachments Optional file attachments.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
 
         if ( empty( $settings['api_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $this->security->decrypt( $settings['api_key'] );
@@ -85,6 +90,21 @@ class Resend_Provider implements Email_Provider_Interface {
             }
         }
 
+        // Add attachments if provided.
+        if ( ! empty( $attachments ) ) {
+            $body['attachments'] = array();
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+                    $content = base64_encode( file_get_contents( $attachment['path'] ) );
+                    $body['attachments'][] = array(
+                        'content'  => $content,
+                        'filename' => isset( $attachment['name'] ) ? $attachment['name'] : basename( $attachment['path'] ),
+                    );
+                }
+            }
+        }
+
         $response = wp_remote_post( self::API_ENDPOINT, array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
@@ -94,8 +114,23 @@ class Resend_Provider implements Email_Provider_Interface {
             'timeout' => 30,
         ) );
 
-        $code = wp_remote_retrieve_response_code( $response );
-        return ! is_wp_error( $response ) && ( $code >= 200 && $code < 300 );
+        $code    = wp_remote_retrieve_response_code( $response );
+        $resp_body = wp_remote_retrieve_body( $response );
+        $success = ! is_wp_error( $response ) && ( $code >= 200 && $code < 300 );
+        $error   = '';
+
+        if ( is_wp_error( $response ) ) {
+            $error = $response->get_error_message();
+        } elseif ( ! $success ) {
+            $data  = json_decode( $resp_body, true );
+            $error = isset( $data['message'] ) ? $data['message'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( json_decode( $resp_body, true )['id'] ?? 're_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     /**
@@ -190,13 +225,13 @@ class Resend_Provider implements Email_Provider_Interface {
         $subject = __( 'Headless Forms - Resend Test', 'headless-forms' );
         $message = '<p>' . __( 'This is a test email from Headless Forms via Resend.', 'headless-forms' ) . '</p>';
 
-        $sent = $this->send( $to, $subject, $message );
+        $result = $this->send( $to, $subject, $message );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
+            'success' => $result['success'],
+            'message' => $result['success']
                 ? __( 'Resend test email sent successfully!', 'headless-forms' )
-                : __( 'Failed to send via Resend. Check your API key and domain verification.', 'headless-forms' ),
+                : $result['error'],
         );
     }
 }

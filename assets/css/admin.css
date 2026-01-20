@@ -144,9 +144,10 @@
     background: var(--hf-bg-card);
     border: 1px solid var(--hf-border);
     border-radius: var(--hf-radius-lg);
-    padding: 28px;
+    padding: 24px;
     min-height: 400px;
     box-shadow: var(--hf-shadow);
+    overflow: hidden; /* Prevent child overflow */
 }
 
 /* ============================================
@@ -156,7 +157,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
     padding-bottom: 20px;
     border-bottom: 1px solid var(--hf-border);
 }
@@ -249,10 +250,21 @@
 
 .hf-button-primary:hover,
 .hf-button-primary:focus {
-    background: linear-gradient(135deg, var(--hf-primary-hover) 0%, #4338ca 100%);
-    color: #fff;
+    background: #1d4ed8;
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    color: #fff;
+}
+
+.hf-button-primary:active {
+    transform: translateY(0);
+}
+
+/* Success Button State */
+.hf-button-success {
+    background: #10b981 !important;
+    border-color: #059669 !important;
+    color: #fff !important;
 }
 
 .hf-button-accent {
@@ -481,11 +493,86 @@
 /* ============================================
    Tables - Modern Style
    ============================================ */
-.hf-wrap .wp-list-table {
+.hf-card form {
+    overflow: hidden;
+}
+
+/* Fix for WordPress native list table floats */
+.hf-card .tablenav {
+    height: auto;
+    margin: 0 0 16px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.hf-card .tablenav.bottom {
+    margin: 16px 0 0 0;
+}
+
+.hf-card .tablenav .actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    float: none; /* Override WP float */
+    padding: 0;
+}
+
+.hf-card .tablenav .actions select {
+    max-width: 200px;
+    margin: 0;
+}
+
+.hf-card .tablenav .actions .button {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: var(--hf-radius);
+    line-height: 36px;
+}
+
+.hf-card .tablenav .tablenav-pages {
+    float: none;
+    margin: 0;
+    color: var(--hf-text-light);
+    font-size: 13px;
+}
+
+/* Search Box alignment */
+.hf-card .search-box {
+    float: right;
+    margin: 0 0 16px 0;
+    display: flex;
+    gap: 8px;
+}
+
+.hf-card .search-box input[type="search"] {
+    width: 250px;
+    margin: 0;
+}
+
+.hf-card .search-box .button {
+    margin: 0;
+}
+
+/* The Table Container */
+.hf-table-container {
+    width: 100%;
+    overflow-x: auto;
     border: 1px solid var(--hf-border);
     border-radius: var(--hf-radius-lg);
     background: var(--hf-bg-card);
-    overflow: hidden;
+}
+
+.hf-wrap .wp-list-table {
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    width: 100%;
+    box-shadow: none;
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
 .hf-wrap .wp-list-table thead th {
@@ -496,14 +583,50 @@
     padding: 14px 16px;
 }
 
+.hf-wrap .wp-list-table thead th:first-child {
+    border-top-left-radius: var(--hf-radius-lg);
+}
+
+.hf-wrap .wp-list-table thead th:last-child {
+    border-top-right-radius: var(--hf-radius-lg);
+}
+
 .hf-wrap .wp-list-table td {
     vertical-align: middle;
     padding: 16px;
     border-bottom: 1px solid var(--hf-border-light);
+    background: transparent;
+}
+
+.hf-wrap .wp-list-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .hf-wrap .wp-list-table tbody tr:hover {
+    background: var(--hf-bg-card);
+}
+
+.hf-wrap .wp-list-table tbody tr:hover td {
     background: var(--hf-bg);
+}
+
+/* Fix for row actions padding */
+.hf-wrap .row-actions {
+    margin-top: 8px;
+}
+
+.hf-wrap .hf-submission-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    background: var(--hf-primary-light);
+    color: var(--hf-primary);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 12px;
+    text-decoration: none;
 }
 
 /* ============================================
@@ -590,7 +713,7 @@
     color: #fff;
 }
 
-.hf-close-modal {
+.hf-modal-header .hf-close-modal {
     cursor: pointer;
     font-size: 28px;
     color: rgba(255,255,255,0.6);
@@ -598,7 +721,7 @@
     transition: color 0.2s;
 }
 
-.hf-close-modal:hover {
+.hf-modal-header .hf-close-modal:hover {
     color: #fff;
 }
 
@@ -868,6 +991,37 @@
     padding: 18px 20px;
     margin: 20px 0;
     border-radius: 0 var(--hf-radius-lg) var(--hf-radius-lg) 0;
+}
+
+/* Test Email Result */
+#hf-test-result {
+    display: block;
+    margin-top: 15px;
+    padding: 12px 16px;
+    border-radius: var(--hf-radius);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+#hf-test-result.success {
+    background: var(--hf-success-light);
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+#hf-test-result.error {
+    background: var(--hf-error-light);
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+#hf-test-result .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+    margin-top: -2px;
+    margin-right: 4px;
 }
 
 /* ============================================

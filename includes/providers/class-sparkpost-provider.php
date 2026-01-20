@@ -22,10 +22,22 @@ class SparkPost_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
         if ( empty( $settings['api_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $this->security->decrypt( $settings['api_key'] );
@@ -46,6 +58,19 @@ class SparkPost_Provider implements Email_Provider_Interface {
             ),
         );
 
+        if ( ! empty( $attachments ) ) {
+            $body['content']['attachments'] = array();
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $body['content']['attachments'][] = array(
+                        'type' => $attachment['mime_type'] ?? 'application/octet-stream',
+                        'name' => $attachment['name'] ?? basename( $attachment['path'] ),
+                        'data' => base64_encode( file_get_contents( $attachment['path'] ) ),
+                    );
+                }
+            }
+        }
+
         $response = wp_remote_post( $endpoint, array(
             'headers' => array(
                 'Authorization' => $api_key,
@@ -55,8 +80,27 @@ class SparkPost_Provider implements Email_Provider_Interface {
             'timeout' => 30,
         ) );
 
-        $code = wp_remote_retrieve_response_code( $response );
-        return ! is_wp_error( $response ) && $code === 200;
+        $code      = wp_remote_retrieve_response_code( $response );
+        $resp_body = wp_remote_retrieve_body( $response );
+        $success   = ! is_wp_error( $response ) && ( $code === 200 || $code === 201 );
+        $error     = '';
+
+        if ( is_wp_error( $response ) ) {
+            $error = $response->get_error_message();
+        } elseif ( ! $success ) {
+            $data  = json_decode( $resp_body, true );
+            if ( isset( $data['errors'][0]['message'] ) ) {
+                $error = $data['errors'][0]['message'];
+            } else {
+                $error = sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+            }
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( json_decode( $resp_body, true )['results']['id'] ?? 'sp_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     private function get_saved_settings() {
@@ -87,7 +131,13 @@ class SparkPost_Provider implements Email_Provider_Interface {
         if ( ! $this->validate_credentials() ) {
             return array( 'success' => false, 'message' => __( 'Configure SparkPost first.', 'headless-forms' ) );
         }
-        $sent = $this->send( $to, __( 'SparkPost Test', 'headless-forms' ), '<p>Test email via SparkPost.</p>' );
-        return array( 'success' => $sent, 'message' => $sent ? __( 'Sent!', 'headless-forms' ) : __( 'Failed.', 'headless-forms' ) );
+        $result = $this->send( $to, __( 'SparkPost Test', 'headless-forms' ), '<p>This is a test email via SparkPost from Headless Forms.</p>' );
+        
+        return array( 
+            'success' => $result['success'], 
+            'message' => $result['success'] 
+                ? __( 'SparkPost test email sent successfully!', 'headless-forms' ) 
+                : $result['error'],
+        );
     }
 }

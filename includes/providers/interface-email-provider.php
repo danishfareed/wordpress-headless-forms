@@ -29,13 +29,15 @@ interface Email_Provider_Interface {
      * Send an email.
      *
      * @since 1.0.0
-     * @param string       $to      Recipient email address.
-     * @param string       $subject Email subject.
-     * @param string       $message Email body (HTML).
-     * @param array|string $headers Optional. Additional headers.
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient email address.
+     * @param string       $subject     Email subject.
+     * @param string       $message     Email body (HTML).
+     * @param array|string $headers     Optional. Additional headers.
+     * @param array        $attachments Optional. File attachments array.
      * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() );
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() );
 
     /**
      * Get the provider display name.

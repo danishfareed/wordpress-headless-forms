@@ -24,10 +24,22 @@ class Elastic_Email_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
         if ( empty( $settings['api_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $this->security->decrypt( $settings['api_key'] );
@@ -44,17 +56,44 @@ class Elastic_Email_Provider implements Email_Provider_Interface {
             'isTransactional' => true,
         );
 
+        if ( ! empty( $attachments ) ) {
+            $i = 1;
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $body[ 'file_' . $i ] = curl_file_create( $attachment['path'], $attachment['mime_type'], $attachment['name'] );
+                    $i++;
+                }
+            }
+        }
+
         $response = wp_remote_post( self::API_ENDPOINT, array(
             'body'    => $body,
             'timeout' => 30,
         ) );
 
         if ( is_wp_error( $response ) ) {
-            return false;
+            return array(
+                'success'    => false,
+                'message_id' => '',
+                'error'      => $response->get_error_message(),
+            );
         }
 
-        $result = json_decode( wp_remote_retrieve_body( $response ), true );
-        return isset( $result['success'] ) && $result['success'] === true;
+        $resp_body = wp_remote_retrieve_body( $response );
+        $result    = json_decode( $resp_body, true );
+        $code      = wp_remote_retrieve_response_code( $response );
+        $success   = isset( $result['success'] ) && $result['success'] === true;
+        $error     = '';
+
+        if ( ! $success ) {
+            $error = isset( $result['error'] ) ? $result['error'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( $result['data']['transactionid'] ?? 'ee_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     private function get_saved_settings() {
@@ -84,7 +123,13 @@ class Elastic_Email_Provider implements Email_Provider_Interface {
         if ( ! $this->validate_credentials() ) {
             return array( 'success' => false, 'message' => __( 'Configure Elastic Email first.', 'headless-forms' ) );
         }
-        $sent = $this->send( $to, __( 'Elastic Email Test', 'headless-forms' ), '<p>Test email.</p>' );
-        return array( 'success' => $sent, 'message' => $sent ? __( 'Sent!', 'headless-forms' ) : __( 'Failed.', 'headless-forms' ) );
+        $result = $this->send( $to, __( 'Elastic Email Test', 'headless-forms' ), '<p>This is a test email via Elastic Email from Headless Forms.</p>' );
+
+        return array( 
+            'success' => $result['success'], 
+            'message' => $result['success'] 
+                ? __( 'Elastic Email test email sent successfully!', 'headless-forms' ) 
+                : $result['error'],
+        );
     }
 }

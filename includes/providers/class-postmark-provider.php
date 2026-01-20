@@ -32,11 +32,23 @@ class Postmark_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
 
         if ( empty( $settings['server_token'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'Postmark Server Token not configured.', 'headless-forms' ),
+            );
         }
 
         $token      = $this->security->decrypt( $settings['server_token'] );
@@ -49,6 +61,19 @@ class Postmark_Provider implements Email_Provider_Interface {
             'Subject'  => $subject,
             'HtmlBody' => $message,
         );
+
+        if ( ! empty( $attachments ) ) {
+            $body['Attachments'] = array();
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $body['Attachments'][] = array(
+                        'Name'        => $attachment['name'] ?? basename( $attachment['path'] ),
+                        'Content'     => base64_encode( file_get_contents( $attachment['path'] ) ),
+                        'ContentType' => $attachment['mime_type'] ?? 'application/octet-stream',
+                    );
+                }
+            }
+        }
 
         if ( is_array( $headers ) ) {
             foreach ( $headers as $header ) {
@@ -68,8 +93,23 @@ class Postmark_Provider implements Email_Provider_Interface {
             'timeout' => 30,
         ) );
 
-        $code = wp_remote_retrieve_response_code( $response );
-        return ! is_wp_error( $response ) && $code === 200;
+        $code      = wp_remote_retrieve_response_code( $response );
+        $resp_body = wp_remote_retrieve_body( $response );
+        $success   = ! is_wp_error( $response ) && $code === 200;
+        $error     = '';
+
+        if ( is_wp_error( $response ) ) {
+            $error = $response->get_error_message();
+        } elseif ( ! $success ) {
+            $data  = json_decode( $resp_body, true );
+            $error = isset( $data['Message'] ) ? $data['Message'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( json_decode( $resp_body, true )['MessageID'] ?? 'pm_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     private function get_saved_settings() {
@@ -126,14 +166,15 @@ class Postmark_Provider implements Email_Provider_Interface {
         }
 
         $subject = __( 'Headless Forms - Postmark Test', 'headless-forms' );
-        $message = '<p>' . __( 'Test email via Postmark.', 'headless-forms' ) . '</p>';
-        $sent = $this->send( $to, $subject, $message );
+        $message = '<p>' . __( 'Test email via Postmark from Headless Forms.', 'headless-forms' ) . '</p>';
+        
+        $result = $this->send( $to, $subject, $message );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
-                ? __( 'Postmark test email sent!', 'headless-forms' )
-                : __( 'Failed to send via Postmark.', 'headless-forms' ),
+            'success' => $result['success'],
+            'message' => $result['success']
+                ? __( 'Postmark test email sent successfully!', 'headless-forms' )
+                : $result['error'],
         );
     }
 }

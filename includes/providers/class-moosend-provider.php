@@ -24,18 +24,65 @@ class Moosend_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
         if ( empty( $settings['api_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key not configured.', 'headless-forms' ),
+            );
         }
 
-        // Moosend uses SMTP for transactional - configure PHPMailer.
-        add_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
-        $result = wp_mail( $to, $subject, $message, $headers );
-        remove_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
+        $error_message = '';
+        $capture_error = function( $error ) use ( &$error_message ) {
+            $error_message = $error->get_error_message();
+        };
 
-        return $result;
+        add_action( 'wp_mail_failed', $capture_error );
+        add_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
+        
+        $success = wp_mail( $to, $subject, $message, $headers, $attachments );
+        
+        remove_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
+        remove_action( 'wp_mail_failed', $capture_error );
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? 'ms_' . time() : '',
+            'error'      => $success ? '' : $this->get_helpful_error( $error_message ),
+        );
+    }
+
+    /**
+     * Provide more context for common Moosend SMTP errors.
+     *
+     * @since 1.0.0
+     * @param string $error Original error message.
+     * @return string
+     */
+    private function get_helpful_error( $error ) {
+        if ( empty( $error ) ) {
+            return __( 'WordPress was unable to send via Moosend. Check if your hosting provider allows external SMTP connections.', 'headless-forms' );
+        }
+
+        if ( stripos( $error, 'Could not connect to SMTP host' ) !== false ) {
+            return $error . ' ' . __( 'Tip: Your server might be blocking outgoing connections to smtp.moosend.com. Contact your host.', 'headless-forms' );
+        }
+
+        if ( stripos( $error, 'Password not accepted' ) !== false || stripos( $error, 'Authentication failed' ) !== false ) {
+            return $error . ' ' . __( 'Tip: Verify your Moosend API Key.', 'headless-forms' );
+        }
+
+        return $error;
     }
 
     public function configure_phpmailer( $phpmailer ) {
@@ -86,7 +133,13 @@ class Moosend_Provider implements Email_Provider_Interface {
         if ( ! $this->validate_credentials() ) {
             return array( 'success' => false, 'message' => __( 'Configure Moosend first.', 'headless-forms' ) );
         }
-        $sent = $this->send( $to, __( 'Moosend Test', 'headless-forms' ), '<p>Test email.</p>', array( 'Content-Type: text/html' ) );
-        return array( 'success' => $sent, 'message' => $sent ? __( 'Sent!', 'headless-forms' ) : __( 'Failed.', 'headless-forms' ) );
+        $result = $this->send( $to, __( 'Moosend Test', 'headless-forms' ), '<p>This is a test email via Moosend from Headless Forms.</p>', array( 'Content-Type: text/html' ) );
+        
+        return array( 
+            'success' => $result['success'], 
+            'message' => $result['success'] 
+                ? __( 'Moosend test email sent successfully!', 'headless-forms' ) 
+                : $result['error'],
+        );
     }
 }

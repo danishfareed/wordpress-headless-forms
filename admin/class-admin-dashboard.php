@@ -44,8 +44,10 @@ class Admin_Dashboard {
         add_action( 'admin_init', array( $this, 'handle_actions' ) );
         add_action( 'wp_ajax_headless_forms_test_email', array( $this, 'ajax_test_email' ) );
         add_action( 'wp_ajax_headless_forms_regenerate_key', array( $this, 'ajax_regenerate_key' ) );
+        add_action( 'wp_ajax_headless_forms_save_settings', array( $this, 'ajax_save_settings' ) );
         add_action( 'wp_ajax_headless_forms_save_webhook', array( $this, 'ajax_save_webhook' ) );
         add_action( 'wp_ajax_headless_forms_delete_webhook', array( $this, 'ajax_delete_webhook' ) );
+        add_action( 'admin_post_headless_forms_download', array( $this, 'handle_file_download' ) );
     }
 
     /**
@@ -77,25 +79,7 @@ class Admin_Dashboard {
      * @return void
      */
     public function render_app() {
-        // Enqueue assets first.
-        wp_enqueue_style( 'headless-forms-admin' );
-        wp_enqueue_script( 'headless-forms-admin' );
-        
-        // Pass necessary data to JS.
-        wp_localize_script(
-            'headless-forms-admin',
-            'headlessFormsAdmin',
-            array(
-                'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-                'nonce'   => wp_create_nonce( 'headless_forms_nonce' ),
-                'apiUrl'  => rest_url( 'headless-forms/v1' ),
-                'strings' => array(
-                    'confirmDelete'    => __( 'Are you sure you want to delete this form? All data will be lost.', 'headless-forms' ),
-                    'copied'           => __( 'Copied!', 'headless-forms' ),
-                    'testEmailSending' => __( 'Sending...', 'headless-forms' ),
-                ),
-            )
-        );
+        // Initialize current view.
 
         // Determine current view and initialize required variables.
         $current_view = isset( $_GET['view'] ) ? sanitize_key( $_GET['view'] ) : 'dashboard';
@@ -207,9 +191,15 @@ class Admin_Dashboard {
             'nonce'     => wp_create_nonce( 'headless_forms_admin' ),
             'restUrl'   => rest_url( 'headless-forms/v1/' ),
             'strings'   => array(
-                'confirmDelete'    => __( 'Are you sure you want to delete this?', 'headless-forms' ),
-                'testEmailSending' => __( 'Sending test email...', 'headless-forms' ),
+                'confirmDelete'    => __( 'Are you sure you want to delete this form? All data will be lost.', 'headless-forms' ),
+                'testEmailSending' => __( 'Sending...', 'headless-forms' ),
+                'testEmailSuccess' => __( 'Success!', 'headless-forms' ),
+                'testEmailError'   => __( 'Test Email Error', 'headless-forms' ),
+                'saveSettings'     => __( 'Save Settings', 'headless-forms' ),
+                'saving'           => __( 'Saving...', 'headless-forms' ),
+                'saved'            => __( 'Saved!', 'headless-forms' ),
                 'copied'           => __( 'Copied!', 'headless-forms' ),
+                'genericError'     => __( 'An error occurred. Please try again.', 'headless-forms' ),
             ),
         ) );
     }
@@ -349,9 +339,19 @@ class Admin_Dashboard {
                 $wpdb->update(
                     $submissions_table,
                     array( 'status' => 'read', 'read_at' => current_time( 'mysql' ) ),
-                    array( 'id' => $submission_id )
                 );
             }
+
+            // Fetch uploads for this submission.
+            $uploads_table = $wpdb->prefix . 'headless_uploads';
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $submission->uploaded_files = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT * FROM {$uploads_table} WHERE submission_id = %d",
+                    $submission_id
+                ),
+                ARRAY_A
+            );
         }
 
         include HEADLESS_FORMS_PATH . 'admin/views/submission-detail.php';
@@ -416,10 +416,12 @@ class Admin_Dashboard {
             'form_description'      => sanitize_textarea_field( $_POST['form_description'] ?? '' ),
             'notification_enabled'  => isset( $_POST['notification_enabled'] ) ? 1 : 0,
             'auto_responder_enabled' => isset( $_POST['auto_responder_enabled'] ) ? 1 : 0,
-            'success_message'       => sanitize_textarea_field( $_POST['success_message'] ?? '' ),
-            'redirect_url'          => esc_url_raw( $_POST['redirect_url'] ?? '' ),
-            'status'                => sanitize_text_field( $_POST['status'] ?? 'active' ),
-            'updated_at'            => current_time( 'mysql' ),
+            'success_message'        => sanitize_textarea_field( $_POST['success_message'] ?? '' ),
+            'redirect_url'           => esc_url_raw( $_POST['redirect_url'] ?? '' ),
+            'file_uploads_enabled'   => isset( $_POST['file_uploads_enabled'] ) ? 1 : 0,
+            'max_file_uploads'       => isset( $_POST['max_file_uploads'] ) ? (int) $_POST['max_file_uploads'] : 1,
+            'status'                 => sanitize_text_field( $_POST['status'] ?? 'active' ),
+            'updated_at'             => current_time( 'mysql' ),
         );
 
         // Email settings.
@@ -520,21 +522,61 @@ class Admin_Dashboard {
     private function save_settings() {
         check_admin_referer( 'headless_forms_save_settings', 'headless_forms_nonce' );
 
+        $this->process_settings_save();
+
+        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=settings&saved=1' ) );
+        exit;
+    }
+
+    /**
+     * AJAX: Save settings.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function ajax_save_settings() {
+        check_ajax_referer( 'headless_forms_admin', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Unauthorized', 'headless-forms' ) ) );
+        }
+
+        $this->process_settings_save();
+
+        wp_send_json_success( array( 'message' => __( 'Settings saved successfully.', 'headless-forms' ) ) );
+    }
+
+    /**
+     * Process settings save logic.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    private function process_settings_save() {
         $security = new Security();
 
         // Email provider.
-        update_option( 'headless_forms_email_provider', sanitize_text_field( $_POST['email_provider'] ) );
+        if ( isset( $_POST['email_provider'] ) ) {
+            update_option( 'headless_forms_email_provider', sanitize_text_field( $_POST['email_provider'] ) );
+        }
 
         // Provider settings.
-        $provider_settings = get_option( 'headless_forms_provider_settings', array() );
-        $provider = sanitize_text_field( $_POST['email_provider'] );
-
         if ( isset( $_POST['provider_settings'] ) && is_array( $_POST['provider_settings'] ) ) {
+            $provider_settings = get_option( 'headless_forms_provider_settings', array() );
+            $provider = sanitize_text_field( $_POST['email_provider'] );
+            
             $settings = array();
             foreach ( $_POST['provider_settings'] as $key => $value ) {
+                // If the value is the placeholder dots, don't update it to prevent blanking out.
+                if ( $value === '••••••••••••' ) {
+                    $old_settings = isset( $provider_settings[ $provider ] ) ? $provider_settings[ $provider ] : array();
+                    $settings[ sanitize_key( $key ) ] = isset( $old_settings[ $key ] ) ? $old_settings[ $key ] : '';
+                    continue;
+                }
+
                 // Encrypt password/key fields.
-                if ( strpos( $key, 'password' ) !== false || strpos( $key, 'secret' ) !== false || strpos( $key, 'api_key' ) !== false || strpos( $key, 'token' ) !== false ) {
-                    $settings[ sanitize_key( $key ) ] = $security->encrypt( sanitize_text_field( $value ) );
+                if ( strpos( $key, 'password' ) !== false || strpos( $key, 'secret' ) !== false || strpos( $key, 'api_key' ) !== false || strpos( $key, 'token' ) !== false || strpos( $key, 'access_key' ) !== false ) {
+                    $settings[ sanitize_key( $key ) ] = ! empty( $value ) ? $security->encrypt( sanitize_text_field( $value ) ) : '';
                 } else {
                     $settings[ sanitize_key( $key ) ] = sanitize_text_field( $value );
                 }
@@ -544,17 +586,26 @@ class Admin_Dashboard {
         }
 
         // Security settings.
-        update_option( 'headless_forms_rate_limit', (int) $_POST['rate_limit'] );
-        update_option( 'headless_forms_rate_limit_window', (int) $_POST['rate_limit_window'] );
-        update_option( 'headless_forms_honeypot_field', sanitize_text_field( $_POST['honeypot_field'] ) );
-        update_option( 'headless_forms_cors_origins', sanitize_textarea_field( $_POST['cors_origins'] ?? '' ) );
+        if ( isset( $_POST['rate_limit'] ) ) {
+            update_option( 'headless_forms_rate_limit', (int) $_POST['rate_limit'] );
+        }
+        if ( isset( $_POST['rate_limit_window'] ) ) {
+            update_option( 'headless_forms_rate_limit_window', (int) $_POST['rate_limit_window'] );
+        }
+        if ( isset( $_POST['honeypot_field'] ) ) {
+            update_option( 'headless_forms_honeypot_field', sanitize_text_field( $_POST['honeypot_field'] ) );
+        }
+        if ( isset( $_POST['cors_origins'] ) ) {
+            update_option( 'headless_forms_cors_origins', sanitize_textarea_field( $_POST['cors_origins'] ) );
+        }
+        update_option( 'headless_forms_cors_enforcement', isset( $_POST['cors_enforcement'] ) );
 
         // Data settings.
         update_option( 'headless_forms_keep_data_on_delete', isset( $_POST['keep_data_on_delete'] ) );
-        update_option( 'headless_forms_data_retention_days', (int) $_POST['data_retention_days'] );
-
-        wp_safe_redirect( admin_url( 'admin.php?page=headless-forms&view=settings&saved=1' ) );
-        exit;
+        
+        if ( isset( $_POST['data_retention_days'] ) ) {
+            update_option( 'headless_forms_data_retention_days', (int) $_POST['data_retention_days'] );
+        }
     }
 
     /**
@@ -605,7 +656,7 @@ class Admin_Dashboard {
         $all_fields = array_unique( $all_fields );
 
         // Header row.
-        $headers = array_merge( array( 'ID', 'Status', 'Submitted At' ), $all_fields, array( 'IP Address', 'User Agent' ) );
+        $headers = array_merge( array( 'ID', 'Status', 'Submitted At' ), $all_fields, array( 'IP Address', 'User Agent', 'Uploaded Files' ) );
         fputcsv( $output, $headers );
 
         // Data rows.
@@ -624,6 +675,18 @@ class Admin_Dashboard {
 
             $row[] = $submission->ip_address;
             $row[] = $submission->user_agent;
+
+            // Get files.
+            $uploads_table = $wpdb->prefix . 'headless_uploads';
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $files = $wpdb->get_results( $wpdb->prepare( "SELECT file_name FROM {$uploads_table} WHERE submission_id = %d", $submission->id ) );
+            $file_names = array();
+            if ( $files ) {
+                foreach ( $files as $file ) {
+                    $file_names[] = $file->file_name;
+                }
+            }
+            $row[] = implode( '; ', $file_names );
 
             fputcsv( $output, $row );
         }
@@ -746,5 +809,46 @@ class Admin_Dashboard {
         } else {
             wp_send_json_error( array( 'message' => 'Failed to delete' ) );
         }
+    }
+
+    /**
+     * Handle secure file download for admins.
+     *
+     * @since 1.1.0
+     * @return void
+     */
+    public function handle_file_download() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'Cheatin&#8217; uh?', 'headless-forms' ) );
+        }
+
+        $file_id = isset( $_GET['file_id'] ) ? (int) $_GET['file_id'] : 0;
+        if ( ! $file_id ) {
+            wp_die( esc_html__( 'Invalid file ID.', 'headless-forms' ) );
+        }
+
+        check_admin_referer( 'download_file_' . $file_id );
+
+        global $wpdb;
+        $uploads_table = $wpdb->prefix . 'headless_uploads';
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+        $file = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$uploads_table} WHERE id = %d", $file_id ) );
+
+        if ( ! $file || ! file_exists( $file->file_path ) ) {
+            wp_die( esc_html__( 'File not found.', 'headless-forms' ) );
+        }
+
+        // Serve file.
+        header( 'Content-Description: File Transfer' );
+        header( 'Content-Type: ' . $file->file_mime );
+        header( 'Content-Disposition: attachment; filename="' . $file->file_name . '"' );
+        header( 'Expires: 0' );
+        header( 'Cache-Control: must-revalidate' );
+        header( 'Pragma: public' );
+        header( 'Content-Length: ' . $file->file_size );
+        
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_readfile
+        readfile( $file->file_path );
+        exit;
     }
 }

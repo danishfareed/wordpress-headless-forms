@@ -55,6 +55,29 @@ if ( ! $submission ) {
             </table>
         </div>
 
+        <?php if ( ! empty( $submission->uploaded_files ) ) : ?>
+            <div class="hf-card hf-submission-uploads" style="margin-top: 24px;">
+                <h2><?php esc_html_e( 'Uploaded Files', 'headless-forms' ); ?></h2>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <?php foreach ( $submission->uploaded_files as $file ) : ?>
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span class="dashicons dashicons-media-default" style="color: #64748b;"></span>
+                                <div>
+                                    <div style="font-weight: 500; font-size: 14px;"><?php echo esc_html( $file['file_name'] ); ?></div>
+                                    <div style="font-size: 12px; color: #94a3b8;"><?php echo esc_html( round( $file['file_size'] / 1024, 2 ) ); ?> KB</div>
+                                </div>
+                            </div>
+                            <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=headless_forms_download&file_id=' . $file['id'] ), 'download_file_' . $file['id'] ) ); ?>" class="hf-button hf-button-small hf-button-secondary">
+                                <span class="dashicons dashicons-download"></span>
+                                <?php esc_html_e( 'Download', 'headless-forms' ); ?>
+                            </a>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <div style="display: flex; flex-direction: column; gap: 24px;">
             <!-- Actions -->
             <div class="hf-card hf-submission-actions">

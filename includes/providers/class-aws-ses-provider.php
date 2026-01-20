@@ -39,23 +39,38 @@ class AWS_SES_Provider implements Email_Provider_Interface {
      * @var array
      */
     private $regions = array(
-        'us-east-1'      => 'email.us-east-1.amazonaws.com',
-        'us-east-2'      => 'email.us-east-2.amazonaws.com',
-        'us-west-1'      => 'email.us-west-1.amazonaws.com',
-        'us-west-2'      => 'email.us-west-2.amazonaws.com',
-        'eu-west-1'      => 'email.eu-west-1.amazonaws.com',
-        'eu-west-2'      => 'email.eu-west-2.amazonaws.com',
-        'eu-west-3'      => 'email.eu-west-3.amazonaws.com',
-        'eu-central-1'   => 'email.eu-central-1.amazonaws.com',
-        'ap-south-1'     => 'email.ap-south-1.amazonaws.com',
-        'ap-southeast-1' => 'email.ap-southeast-1.amazonaws.com',
-        'ap-southeast-2' => 'email.ap-southeast-2.amazonaws.com',
-        'ap-northeast-1' => 'email.ap-northeast-1.amazonaws.com',
-        'ap-northeast-2' => 'email.ap-northeast-2.amazonaws.com',
-        'sa-east-1'      => 'email.sa-east-1.amazonaws.com',
-        'ca-central-1'   => 'email.ca-central-1.amazonaws.com',
-        'me-south-1'     => 'email.me-south-1.amazonaws.com',
-        'af-south-1'     => 'email.af-south-1.amazonaws.com',
+        'us-east-1'      => 'US East (N. Virginia)',
+        'us-east-2'      => 'US East (Ohio)',
+        'us-west-1'      => 'US West (N. California)',
+        'us-west-2'      => 'US West (Oregon)',
+        'af-south-1'     => 'Africa (Cape Town)',
+        'ap-east-1'      => 'Asia Pacific (Hong Kong)',
+        'ap-south-1'     => 'Asia Pacific (Mumbai)',
+        'ap-south-2'     => 'Asia Pacific (Hyderabad)',
+        'ap-southeast-1' => 'Asia Pacific (Singapore)',
+        'ap-southeast-2' => 'Asia Pacific (Sydney)',
+        'ap-southeast-3' => 'Asia Pacific (Jakarta)',
+        'ap-southeast-4' => 'Asia Pacific (Melbourne)',
+        'ap-northeast-1' => 'Asia Pacific (Tokyo)',
+        'ap-northeast-2' => 'Asia Pacific (Seoul)',
+        'ap-northeast-3' => 'Asia Pacific (Osaka)',
+        'ca-central-1'   => 'Canada (Central)',
+        'ca-west-1'      => 'Canada (West)',
+        'eu-central-1'   => 'Europe (Frankfurt)',
+        'eu-central-2'   => 'Europe (Zurich)',
+        'eu-west-1'      => 'Europe (Ireland)',
+        'eu-west-2'      => 'Europe (London)',
+        'eu-west-3'      => 'Europe (Paris)',
+        'eu-north-1'     => 'Europe (Stockholm)',
+        'eu-south-1'     => 'Europe (Milan)',
+        'eu-south-2'     => 'Europe (Spain)',
+        'il-central-1'   => 'Israel (Tel Aviv)',
+        'me-south-1'     => 'Middle East (Bahrain)',
+        'me-central-1'   => 'Middle East (UAE)',
+        'sa-east-1'      => 'South America (São Paulo)',
+        'us-gov-east-1'  => 'AWS GovCloud (US-East)',
+        'us-gov-west-1'  => 'AWS GovCloud (US-West)',
+        'custom'         => 'Custom Region...',
     );
 
     /**
@@ -69,27 +84,32 @@ class AWS_SES_Provider implements Email_Provider_Interface {
      * Send an email.
      *
      * @since 1.0.0
-     * @param string       $to      Recipient.
-     * @param string       $subject Subject.
-     * @param string       $message Message.
-     * @param array|string $headers Headers.
-     * @return bool
+     * @since 1.1.0 Added $attachments parameter.
+     * @param string       $to          Recipient.
+     * @param string       $subject     Subject.
+     * @param string       $message     Message.
+     * @param array|string $headers     Headers.
+     * @param array        $attachments Optional file attachments.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
 
         if ( empty( $settings['access_key'] ) || empty( $settings['secret_key'] ) || empty( $settings['region'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'AWS credentials or region not configured.', 'headless-forms' ),
+            );
         }
 
-        $access_key = $settings['access_key'];
+        $access_key = $this->security->decrypt( $settings['access_key'] );
         $secret_key = $this->security->decrypt( $settings['secret_key'] );
-        $region     = $settings['region'];
+        $region     = ( isset( $settings['region'] ) && $settings['region'] === 'custom' && ! empty( $settings['custom_region'] ) ) ? $settings['custom_region'] : $settings['region'];
         $from_email = ! empty( $settings['from_email'] ) ? $settings['from_email'] : get_option( 'admin_email' );
         $from_name  = ! empty( $settings['from_name'] ) ? $settings['from_name'] : get_bloginfo( 'name' );
         $return_path = ! empty( $settings['return_path'] ) ? $settings['return_path'] : $from_email;
 
-        // Build raw email.
+        // Build raw email (multipart/mixed if attachments exist).
         $boundary = uniqid( 'boundary_', true );
         $date     = gmdate( 'D, d M Y H:i:s O' );
 
@@ -99,9 +119,37 @@ class AWS_SES_Provider implements Email_Provider_Interface {
         $raw_message .= "Date: {$date}\r\n";
         $raw_message .= "Return-Path: {$return_path}\r\n";
         $raw_message .= "MIME-Version: 1.0\r\n";
-        $raw_message .= "Content-Type: text/html; charset=UTF-8\r\n";
-        $raw_message .= "\r\n";
-        $raw_message .= $message;
+
+        if ( empty( $attachments ) ) {
+            $raw_message .= "Content-Type: text/html; charset=UTF-8\r\n";
+            $raw_message .= "\r\n";
+            $raw_message .= $message;
+        } else {
+            $raw_message .= "Content-Type: multipart/mixed; boundary=\"{$boundary}\"\r\n";
+            $raw_message .= "\r\n";
+            $raw_message .= "--{$boundary}\r\n";
+            $raw_message .= "Content-Type: text/html; charset=UTF-8\r\n";
+            $raw_message .= "\r\n";
+            $raw_message .= $message . "\r\n";
+
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $filename = $attachment['name'] ?? basename( $attachment['path'] );
+                    $mime_type = $attachment['mime_type'] ?? 'application/octet-stream';
+                    // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+                    $content = chunk_split( base64_encode( file_get_contents( $attachment['path'] ) ) );
+
+                    $raw_message .= "--{$boundary}\r\n";
+                    $raw_message .= "Content-Type: {$mime_type}; name=\"{$filename}\"\r\n";
+                    $raw_message .= "Content-Description: {$filename}\r\n";
+                    $raw_message .= "Content-Disposition: attachment; filename=\"{$filename}\"; size=" . filesize( $attachment['path'] ) . ";\r\n";
+                    $raw_message .= "Content-Transfer-Encoding: base64\r\n";
+                    $raw_message .= "\r\n";
+                    $raw_message .= $content . "\r\n";
+                }
+            }
+            $raw_message .= "--{$boundary}--";
+        }
 
         // AWS SES v2 API endpoint.
         $host     = "email.{$region}.amazonaws.com";
@@ -141,7 +189,7 @@ class AWS_SES_Provider implements Email_Provider_Interface {
         return array(
             'success'    => false,
             'message_id' => null,
-            'error'      => isset( $body['message'] ) ? $body['message'] : 'Unknown AWS SES error',
+            'error'      => isset( $body['message'] ) ? $body['message'] : ( isset( $body['Message'] ) ? $body['Message'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code ) ),
         );
     }
 
@@ -254,10 +302,7 @@ class AWS_SES_Provider implements Email_Provider_Interface {
      * @return array
      */
     public function get_settings_fields() {
-        $region_options = array();
-        foreach ( array_keys( $this->regions ) as $region ) {
-            $region_options[ $region ] = $region;
-        }
+        $region_options = $this->regions;
 
         return array(
             array(
@@ -276,15 +321,22 @@ class AWS_SES_Provider implements Email_Provider_Interface {
                 'id'       => 'region',
                 'label'    => __( 'AWS Region', 'headless-forms' ),
                 'type'     => 'select',
-                'options'  => $region_options,
+                'options'  => $this->regions,
                 'required' => true,
+            ),
+            array(
+                'id'          => 'custom_region',
+                'label'       => __( 'Custom Region Name', 'headless-forms' ),
+                'type'        => 'text',
+                'placeholder' => 'e.g. us-east-1',
+                'description' => __( 'Only used if "Custom Region..." is selected above.', 'headless-forms' ),
             ),
             array(
                 'id'          => 'from_email',
                 'label'       => __( 'From Email', 'headless-forms' ),
                 'type'        => 'email',
                 'required'    => true,
-                'description' => __( 'Must be verified in AWS SES.', 'headless-forms' ),
+                'description' => __( 'Must be verified in your AWS SES console. If you are in "Sandbox Mode", you can ONLY send to verified emails.', 'headless-forms' ),
             ),
             array(
                 'id'    => 'from_name',
@@ -308,9 +360,15 @@ class AWS_SES_Provider implements Email_Provider_Interface {
      */
     public function validate_credentials() {
         $settings = $this->get_saved_settings();
-        return ! empty( $settings['access_key'] ) 
-            && ! empty( $settings['secret_key'] ) 
-            && ! empty( $settings['region'] );
+        if ( empty( $settings['access_key'] ) || empty( $settings['secret_key'] ) || empty( $settings['region'] ) ) {
+            return false;
+        }
+
+        if ( $settings['region'] === 'custom' && empty( $settings['custom_region'] ) ) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -346,13 +404,13 @@ class AWS_SES_Provider implements Email_Provider_Interface {
             $this->get_saved_settings()['region']
         );
 
-        $sent = $this->send( $to, $subject, $message );
+        $result = $this->send( $to, $subject, $message );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
+            'success' => $result['success'],
+            'message' => $result['success']
                 ? __( 'AWS SES test email sent successfully!', 'headless-forms' )
-                : __( 'Failed to send via AWS SES. Check your credentials and ensure the sender is verified.', 'headless-forms' ),
+                : $result['error'],
         );
     }
 }

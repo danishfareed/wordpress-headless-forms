@@ -14,6 +14,7 @@ $honeypot_field = get_option( 'headless_forms_honeypot_field', '_honey' );
 $cors_origins = get_option( 'headless_forms_cors_origins', '' );
 $keep_data = get_option( 'headless_forms_keep_data_on_delete', false );
 $retention_days = get_option( 'headless_forms_data_retention_days', 365 );
+$cors_enforcement = get_option( 'headless_forms_cors_enforcement', false );
 $provider_settings = get_option( 'headless_forms_provider_settings', array() );
 ?>
 
@@ -92,8 +93,13 @@ $provider_settings = get_option( 'headless_forms_provider_settings', array() );
                             <?php foreach ( $provider['fields'] as $field ) : ?>
                                 <?php
                                 $saved_value = isset( $provider_settings[ $slug ][ $field['id'] ] ) ? $provider_settings[ $slug ][ $field['id'] ] : '';
-                                // Don't show encrypted values.
-                                if ( in_array( $field['type'], array( 'password' ), true ) && ! empty( $saved_value ) ) {
+                                
+                                // Check if this is a sensitive field.
+                                $field_id = $field['id'];
+                                $is_sensitive = ( strpos( $field_id, 'password' ) !== false || strpos( $field_id, 'secret' ) !== false || strpos( $field_id, 'api_key' ) !== false || strpos( $field_id, 'token' ) !== false || strpos( $field_id, 'access_key' ) !== false );
+
+                                // Mask sensitive values.
+                                if ( $is_sensitive && ! empty( $saved_value ) ) {
                                     $saved_value = '••••••••••••';
                                 }
                                 ?>
@@ -168,10 +174,17 @@ $provider_settings = get_option( 'headless_forms_provider_settings', array() );
                     </td>
                 </tr>
                 <tr>
-                    <th><label for="cors_origins"><?php esc_html_e( 'Allowed Origins (CORS)', 'headless-forms' ); ?></label></th>
+                    <th><label for="cors_enforcement"><?php esc_html_e( 'Strict CORS Enforcement', 'headless-forms' ); ?></label></th>
                     <td>
-                        <textarea id="cors_origins" name="cors_origins" class="large-text" rows="3"><?php echo esc_textarea( $cors_origins ); ?></textarea>
-                        <p class="description"><?php esc_html_e( 'One origin per line. Leave empty to allow all origins.', 'headless-forms' ); ?></p>
+                        <input type="checkbox" id="cors_enforcement" name="cors_enforcement" value="1" <?php checked( $cors_enforcement ); ?>>
+                        <p class="description"><?php esc_html_e( 'If enabled, ONLY the origins listed below will be allowed. If disabled, all origins are allowed.', 'headless-forms' ); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="cors_origins"><?php esc_html_e( 'Allowed Origins', 'headless-forms' ); ?></label></th>
+                    <td>
+                        <textarea id="cors_origins" name="cors_origins" class="large-text" rows="3" placeholder="https://example.com"><?php echo esc_textarea( $cors_origins ); ?></textarea>
+                        <p class="description"><?php esc_html_e( 'One origin per line. Only used if Strict CORS Enforcement is ON.', 'headless-forms' ); ?></p>
                     </td>
                 </tr>
             </table>

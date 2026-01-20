@@ -24,10 +24,22 @@ class SMTP2GO_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
         if ( empty( $settings['api_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $this->security->decrypt( $settings['api_key'] );
@@ -42,6 +54,19 @@ class SMTP2GO_Provider implements Email_Provider_Interface {
             'html_body' => $message,
         );
 
+        if ( ! empty( $attachments ) ) {
+            $body['attachments'] = array();
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $body['attachments'][] = array(
+                        'filename' => $attachment['name'] ?? basename( $attachment['path'] ),
+                        'fileblob' => base64_encode( file_get_contents( $attachment['path'] ) ),
+                        'mimetype' => $attachment['mime_type'] ?? 'application/octet-stream',
+                    );
+                }
+            }
+        }
+
         $response = wp_remote_post( self::API_ENDPOINT, array(
             'headers' => array( 'Content-Type' => 'application/json' ),
             'body'    => wp_json_encode( $body ),
@@ -49,11 +74,34 @@ class SMTP2GO_Provider implements Email_Provider_Interface {
         ) );
 
         if ( is_wp_error( $response ) ) {
-            return false;
+            return array(
+                'success'    => false,
+                'message_id' => '',
+                'error'      => $response->get_error_message(),
+            );
         }
 
-        $result = json_decode( wp_remote_retrieve_body( $response ), true );
-        return isset( $result['data']['succeeded'] ) && $result['data']['succeeded'] > 0;
+        $resp_body = wp_remote_retrieve_body( $response );
+        $result    = json_decode( $resp_body, true );
+        $code      = wp_remote_retrieve_response_code( $response );
+        $success   = isset( $result['data']['succeeded'] ) && $result['data']['succeeded'] > 0;
+        $error     = '';
+
+        if ( ! $success ) {
+            if ( isset( $result['data']['error'] ) ) {
+                $error = $result['data']['error'];
+            } elseif ( isset( $result['data']['failures'][0] ) ) {
+                $error = $result['data']['failures'][0];
+            } else {
+                $error = sprintf( __( 'API returned code %d', 'headless-forms' ), $code );
+            }
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( $result['data']['email_id'] ?? 's2g_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     private function get_saved_settings() {
@@ -83,7 +131,13 @@ class SMTP2GO_Provider implements Email_Provider_Interface {
         if ( ! $this->validate_credentials() ) {
             return array( 'success' => false, 'message' => __( 'Configure SMTP2GO first.', 'headless-forms' ) );
         }
-        $sent = $this->send( $to, __( 'SMTP2GO Test', 'headless-forms' ), '<p>Test email.</p>' );
-        return array( 'success' => $sent, 'message' => $sent ? __( 'Sent!', 'headless-forms' ) : __( 'Failed.', 'headless-forms' ) );
+        $result = $this->send( $to, __( 'SMTP2GO Test', 'headless-forms' ), '<p>This is a test email via SMTP2GO from Headless Forms.</p>' );
+
+        return array( 
+            'success' => $result['success'], 
+            'message' => $result['success'] 
+                ? __( 'SMTP2GO test email sent successfully!', 'headless-forms' ) 
+                : $result['error'],
+        );
     }
 }

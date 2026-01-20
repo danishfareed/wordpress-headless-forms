@@ -39,9 +39,9 @@ defined( 'ABSPATH' ) || exit;
     <form method="get">
         <input type="hidden" name="page" value="headless-forms">
         <input type="hidden" name="view" value="forms">
-        <?php
-        $forms_table->search_box( __( 'Search Forms', 'headless-forms' ), 'form' );
-        $forms_table->display();
-        ?>
+        <?php $forms_table->search_box( __( 'Search Forms', 'headless-forms' ), 'form' ); ?>
+        <div class="hf-table-container">
+            <?php $forms_table->display(); ?>
+        </div>
     </form>
 </div>

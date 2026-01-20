@@ -48,18 +48,50 @@ class SMTP_Provider implements Email_Provider_Interface {
      * @param string       $subject Subject.
      * @param string       $message Message.
      * @param array|string $headers Headers.
-     * @return bool
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
      */
-    public function send( $to, $subject, $message, $headers = array() ) {
-        // Configure PHPMailer via WordPress hooks.
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
+        $error_message = '';
+        $capture_error = function( $error ) use ( &$error_message ) {
+            $error_message = $error->get_error_message();
+        };
+
+        add_action( 'wp_mail_failed', $capture_error );
         add_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
 
-        $result = wp_mail( $to, $subject, $message, $headers );
+        $success = wp_mail( $to, $subject, $message, $headers, $attachments );
 
-        // Remove the filter after sending.
         remove_action( 'phpmailer_init', array( $this, 'configure_phpmailer' ) );
+        remove_action( 'wp_mail_failed', $capture_error );
 
-        return $result;
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? 'smtp_' . time() : '',
+            'error'      => $success ? '' : $this->get_helpful_error( $error_message ),
+        );
+    }
+
+    /**
+     * Provide more context for common SMTP errors.
+     *
+     * @since 1.0.0
+     * @param string $error Original error message.
+     * @return string
+     */
+    private function get_helpful_error( $error ) {
+        if ( empty( $error ) ) {
+            return __( 'WordPress was unable to send via SMTP. Check if your hosting provider allows external SMTP connections.', 'headless-forms' );
+        }
+
+        if ( stripos( $error, 'Could not connect to SMTP host' ) !== false ) {
+            return $error . ' ' . __( 'Tip: Verify your SMTP Host, Port, and Encryption (SSL/TLS) settings. Some hosts block port 25 or 465.', 'headless-forms' );
+        }
+
+        if ( stripos( $error, 'Password not accepted' ) !== false || stripos( $error, 'Authentication failed' ) !== false ) {
+            return $error . ' ' . __( 'Tip: Double-check your SMTP Username and Password. If using Gmail, you may need an App Password.', 'headless-forms' );
+        }
+
+        return $error;
     }
 
     /**
@@ -233,13 +265,13 @@ class SMTP_Provider implements Email_Provider_Interface {
         );
 
         $headers = array( 'Content-Type: text/html; charset=UTF-8' );
-        $sent = $this->send( $to, $subject, $message, $headers );
+        $result  = $this->send( $to, $subject, $message, $headers );
 
         return array(
-            'success' => $sent,
-            'message' => $sent
+            'success' => $result['success'],
+            'message' => $result['success']
                 ? __( 'SMTP test email sent successfully!', 'headless-forms' )
-                : __( 'Failed to send via SMTP. Check your server settings.', 'headless-forms' ),
+                : $result['error'],
         );
     }
 }

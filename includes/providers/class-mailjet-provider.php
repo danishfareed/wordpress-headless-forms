@@ -24,10 +24,22 @@ class Mailjet_Provider implements Email_Provider_Interface {
         $this->security = new Security();
     }
 
-    public function send( $to, $subject, $message, $headers = array() ) {
+    /**
+     * Send an email.
+     *
+     * @param string       $to      Recipient.
+     * @param string       $subject Subject.
+     * @param string       $message Message.
+     * @param array|string $headers Headers.
+     * @return array Result array ['success' => bool, 'message_id' => string, 'error' => string].
+     */
+    public function send( $to, $subject, $message, $headers = array(), $attachments = array() ) {
         $settings = $this->get_saved_settings();
         if ( empty( $settings['api_key'] ) || empty( $settings['secret_key'] ) ) {
-            return false;
+            return array(
+                'success' => false,
+                'error'   => __( 'API Key or Secret Token not configured.', 'headless-forms' ),
+            );
         }
 
         $api_key    = $settings['api_key'];
@@ -46,6 +58,19 @@ class Mailjet_Provider implements Email_Provider_Interface {
             ),
         );
 
+        if ( ! empty( $attachments ) ) {
+            $body['Messages'][0]['Attachments'] = array();
+            foreach ( $attachments as $attachment ) {
+                if ( isset( $attachment['path'] ) && file_exists( $attachment['path'] ) ) {
+                    $body['Messages'][0]['Attachments'][] = array(
+                        'ContentType'   => $attachment['mime_type'] ?? 'application/octet-stream',
+                        'Filename'      => $attachment['name'] ?? basename( $attachment['path'] ),
+                        'Base64Content' => base64_encode( file_get_contents( $attachment['path'] ) ),
+                    );
+                }
+            }
+        }
+
         $response = wp_remote_post( self::API_ENDPOINT, array(
             'headers' => array(
                 'Authorization' => 'Basic ' . base64_encode( $api_key . ':' . $secret_key ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
@@ -55,8 +80,25 @@ class Mailjet_Provider implements Email_Provider_Interface {
             'timeout' => 30,
         ) );
 
-        $code = wp_remote_retrieve_response_code( $response );
-        return ! is_wp_error( $response ) && $code === 200;
+        $code      = wp_remote_retrieve_response_code( $response );
+        $resp_body = wp_remote_retrieve_body( $response );
+        $success   = ! is_wp_error( $response ) && $code === 200;
+        $error     = '';
+
+        if ( is_wp_error( $response ) ) {
+            $error = $response->get_error_message();
+        } elseif ( ! $success ) {
+            $data  = json_decode( $resp_body, true );
+            $error = isset( $data['Messages'][0]['Errors'][0]['ErrorMessage'] ) 
+                ? $data['Messages'][0]['Errors'][0]['ErrorMessage'] 
+                : ( isset( $data['ErrorMessage'] ) ? $data['ErrorMessage'] : sprintf( __( 'API returned code %d', 'headless-forms' ), $code ) );
+        }
+
+        return array(
+            'success'    => $success,
+            'message_id' => $success ? ( json_decode( $resp_body, true )['Messages'][0]['To'][0]['MessageID'] ?? 'mj_' . time() ) : '',
+            'error'      => $error,
+        );
     }
 
     private function get_saved_settings() {
@@ -87,7 +129,13 @@ class Mailjet_Provider implements Email_Provider_Interface {
         if ( ! $this->validate_credentials() ) {
             return array( 'success' => false, 'message' => __( 'Configure Mailjet first.', 'headless-forms' ) );
         }
-        $sent = $this->send( $to, __( 'Mailjet Test', 'headless-forms' ), '<p>Test email.</p>' );
-        return array( 'success' => $sent, 'message' => $sent ? __( 'Sent!', 'headless-forms' ) : __( 'Failed.', 'headless-forms' ) );
+        $result = $this->send( $to, __( 'Mailjet Test', 'headless-forms' ), '<p>This is a test email via Mailjet from Headless Forms.</p>' );
+
+        return array( 
+            'success' => $result['success'], 
+            'message' => $result['success'] 
+                ? __( 'Mailjet test email sent successfully!', 'headless-forms' ) 
+                : $result['error'],
+        );
     }
 }

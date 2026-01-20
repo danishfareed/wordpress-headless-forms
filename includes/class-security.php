@@ -311,17 +311,22 @@ class Security {
      * @return string The encrypted data.
      */
     public function encrypt( $data ) {
+        if ( empty( $data ) ) {
+            return '';
+        }
+        
+        $encrypted = '';
         if ( function_exists( 'sodium_crypto_secretbox' ) ) {
             $key   = $this->get_encryption_key();
             $nonce = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
 
-            $encrypted = sodium_crypto_secretbox( $data, $nonce, $key );
-
-            return base64_encode( $nonce . $encrypted ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+            $encrypted = base64_encode( $nonce . sodium_crypto_secretbox( $data, $nonce, $key ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+        } else {
+            // Fallback to base64 (not truly encrypted, but obscured).
+            $encrypted = base64_encode( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
         }
 
-        // Fallback to base64 (not truly encrypted, but obscured).
-        return base64_encode( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+        return 'hf_enc:' . $encrypted;
     }
 
     /**
@@ -332,11 +337,12 @@ class Security {
      * @return string|false The decrypted data or false on failure.
      */
     public function decrypt( $data ) {
-        $decoded = base64_decode( $data, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
-
-        if ( false === $decoded ) {
-            return false;
+        if ( strpos( $data, 'hf_enc:' ) !== 0 ) {
+            return $data; // Not encrypted by our system.
         }
+
+        $data = substr( $data, 7 );
+        $decoded = base64_decode( $data, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 
         if ( function_exists( 'sodium_crypto_secretbox_open' ) && strlen( $decoded ) > SODIUM_CRYPTO_SECRETBOX_NONCEBYTES ) {
             $key   = $this->get_encryption_key();
@@ -379,11 +385,18 @@ class Security {
      * @return bool True if valid, false otherwise.
      */
     public function validate_cors_origin( $origin ) {
+        // Check if enforcement is enabled.
+        $enforcement = get_option( 'headless_forms_cors_enforcement', false );
+
+        if ( ! $enforcement ) {
+            return true;
+        }
+
         $allowed_origins = get_option( 'headless_forms_cors_origins', '' );
 
-        // If no origins configured, allow all.
+        // If enforcement is on but no origins configured, deny all (secure by default).
         if ( empty( $allowed_origins ) ) {
-            return true;
+            return false;
         }
 
         $origins = array_map( 'trim', explode( "\n", $allowed_origins ) );
