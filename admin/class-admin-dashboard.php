@@ -424,12 +424,28 @@ class Admin_Dashboard {
             'updated_at'             => current_time( 'mysql' ),
         );
 
+        // Format specification for each field.
+        $format = array(
+            '%s', // form_name
+            '%s', // form_slug
+            '%s', // form_description
+            '%d', // notification_enabled
+            '%d', // auto_responder_enabled
+            '%s', // success_message
+            '%s', // redirect_url
+            '%d', // file_uploads_enabled
+            '%d', // max_file_uploads
+            '%s', // status
+            '%s', // updated_at
+        );
+
         // Email settings.
         $email_settings = array(
             'recipients' => sanitize_textarea_field( $_POST['email_recipients'] ?? '' ),
             'subject'    => sanitize_text_field( $_POST['email_subject'] ?? '' ),
         );
         $data['email_settings'] = wp_json_encode( $email_settings );
+        $format[] = '%s'; // email_settings
 
         // Auto-responder settings.
         $auto_settings = array(
@@ -437,15 +453,17 @@ class Admin_Dashboard {
             'message' => wp_kses_post( $_POST['auto_responder_message'] ?? '' ),
         );
         $data['auto_responder_settings'] = wp_json_encode( $auto_settings );
+        $format[] = '%s'; // auto_responder_settings
 
         if ( $form_id ) {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-            $wpdb->update( $table, $data, array( 'id' => $form_id ) );
+            $wpdb->update( $table, $data, array( 'id' => $form_id ), $format, array( '%d' ) );
             $redirect_id = $form_id;
         } else {
             $data['created_at'] = current_time( 'mysql' );
+            $format[] = '%s'; // created_at
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-            $wpdb->insert( $table, $data );
+            $wpdb->insert( $table, $data, $format );
             $redirect_id = $wpdb->insert_id;
         }
 
