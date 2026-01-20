@@ -38,6 +38,12 @@ if ( $form ) {
     <?php endif; ?>
 </div>
 
+<?php if ( isset( $_GET['saved'] ) ) : ?>
+    <div class="notice notice-success is-dismissible" style="margin-left: 0; margin-top: 16px;">
+        <p><?php esc_html_e( 'Form saved successfully.', 'headless-forms' ); ?></p>
+    </div>
+<?php endif; ?>
+
 <div id="tab-settings" class="hf-tab-content active">
 
 <form method="post" action="" class="hf-form-edit">
